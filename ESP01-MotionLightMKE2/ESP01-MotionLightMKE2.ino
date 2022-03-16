@@ -395,6 +395,8 @@ void setup() {
       Serial.print("ssid_1 ");
       if(millis()-connectingTime > 20000){
           Serial.println("Cant connect to ssid_1! Restarting now...");
+          delay(1000);
+          ESP.restart();
       }
   }
 
