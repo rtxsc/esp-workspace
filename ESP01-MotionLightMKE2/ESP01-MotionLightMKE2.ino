@@ -375,14 +375,14 @@ void setup() {
 
   long connectingTime = millis();
   
-  WiFi.begin(ssid, pass);
-
+  WiFi.begin(ssid, pass); 
+  int elapse = 0;
   //  first try with ssid_0
     while (WiFi.status() != WL_CONNECTED) {
       delay(500);
       elapse = 20000 - (millis() - connectingTime);
       Serial.print("Connecting to ssid_0 in ");
-      Serial.println(elapse);
+      Serial.println(elapse/1000);
       if(millis()-connectingTime > 20000){
           Serial.println("Cant connect to ssid_0! Changing WiFi SSID to ssid_1");
           ssid = ssid_1;
@@ -396,7 +396,7 @@ void setup() {
       delay(500);
       elapse = 20000 - (millis() - connectingTime);
       Serial.print("Connecting to ssid_1 in ");
-      Serial.println(elapse);
+      Serial.println(elapse/1000);
       if(millis()-connectingTime > 20000){
           Serial.println("Cant connect to ssid_1! Restarting now...");
           delay(2000);
