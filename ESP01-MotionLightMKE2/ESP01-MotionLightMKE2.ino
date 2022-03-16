@@ -365,6 +365,7 @@ void printTimeNTP(){
 void setup() {
   // initialize digital pin LED_BUILTIN as an output.
   Serial.begin(115200);
+  Serial.println("Welcome to ESP01s MKE2");
   pinMode(LED02, OUTPUT);
   pinMode(RELAY, OUTPUT);
   pinMode(MOTION, INPUT);
@@ -376,15 +377,28 @@ void setup() {
   
   WiFi.begin(ssid, pass);
 
+  //  first try with ssid_0
     while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-    if(millis()-connectingTime > 20000){
-        Serial.println("Too long! Changing WiFi SSID");
-        ssid = ssid_1;
-        WiFi.begin(ssid, pass);
-    }
+      delay(500);
+      Serial.print("ssid_0 ");
+      if(millis()-connectingTime > 20000){
+          Serial.println("Cant connect to ssid_0! Changing WiFi SSID to ssid_1");
+          ssid = ssid_1;
+          break;
+      }
   }
+
+  //  second try with ssid_1
+  WiFi.begin(ssid, pass);
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print("ssid_1 ");
+      if(millis()-connectingTime > 20000){
+          Serial.println("Cant connect to ssid_1! Restarting now...");
+      }
+  }
+
+
 
   Serial.println("");
   Serial.println("WiFi connected");
