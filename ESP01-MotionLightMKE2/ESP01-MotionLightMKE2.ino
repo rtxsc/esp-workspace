@@ -116,7 +116,7 @@ void reconnect() {
       Serial.println("MQTT broker connected");
       // Once connected, publish an announcement...
       client.publish(publish_topic_hello, "hello from ESP01 MKE2");
-      client.publish(publish_topic_ssid, ssid);
+      // client.publish(publish_topic_ssid, ssid);
 
       // ... and resubscribe
       client.subscribe(subscribed_topic);
@@ -221,6 +221,8 @@ void get_ping(){
 }
 
 void checkDeviceState(){
+  client.publish(publish_topic_ssid, ssid);
+  delay(100);
   bool relayState   = digitalRead(RELAY);
   bool ledState     = digitalRead(LED02);
   bool motionState  = digitalRead(MOTION);
@@ -379,7 +381,7 @@ void setup() {
   int elapse = 0;
   //  first try with ssid_0
     while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
+      delay(1000);
       elapse = 20000 - (millis() - connectingTime);
       Serial.print("Connecting to ssid_0 in ");
       Serial.println(elapse/1000);
@@ -393,7 +395,7 @@ void setup() {
   //  second try with ssid_1
   WiFi.begin(ssid, pass);
     while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
+      delay(1000);
       elapse = 20000 - (millis() - connectingTime);
       Serial.print("Connecting to ssid_1 in ");
       Serial.println(elapse/1000);
