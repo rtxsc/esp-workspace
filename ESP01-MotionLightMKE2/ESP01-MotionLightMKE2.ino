@@ -380,22 +380,26 @@ void setup() {
   //  first try with ssid_0
     while (WiFi.status() != WL_CONNECTED) {
       delay(500);
-      Serial.print("ssid_0 ");
+      elapse = 20000 - (millis() - connectingTime);
+      Serial.print("Connecting to ssid_0 in ");
+      Serial.println(elapse);
       if(millis()-connectingTime > 20000){
           Serial.println("Cant connect to ssid_0! Changing WiFi SSID to ssid_1");
           ssid = ssid_1;
           break;
       }
   }
-
+  connectingTime = millis();
   //  second try with ssid_1
   WiFi.begin(ssid, pass);
     while (WiFi.status() != WL_CONNECTED) {
       delay(500);
-      Serial.print("ssid_1 ");
+      elapse = 20000 - (millis() - connectingTime);
+      Serial.print("Connecting to ssid_1 in ");
+      Serial.println(elapse);
       if(millis()-connectingTime > 20000){
           Serial.println("Cant connect to ssid_1! Restarting now...");
-          delay(1000);
+          delay(2000);
           ESP.restart();
       }
   }
