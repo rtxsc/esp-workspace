@@ -6,6 +6,9 @@
 #include <WiFiUdp.h>
 #include <PubSubClient.h>
 
+#define ssid_0 "NPRDC CELCOM M1"
+#define ssid_1 "NPRDC CELCOM M2"
+
 #include <Pinger.h>
 extern "C"
 {
@@ -15,7 +18,7 @@ extern "C"
 const char* mqtt_server = "broker.emqx.io"; // "broker.mqtt-dashboard.com"; 
 const int   mqtt_port = 1883; // 1883;
 
-const char* ssid = "NPRDC CELCOM M2";
+char* ssid = ssid_0;
 const char* pass = "nprdc1234";
 //char ssid[] = "iPhone 12 Pro Max"; // iPhone 12 Pro Max
 //char pass[] = "robotronix";
@@ -37,9 +40,12 @@ const char*   subscribed_topic      = "raspberryToEsp/relayControl";
 const char*   subscribed_topic_1    = "raspberryToEsp/automation";
 const char*   subscribed_topic_2    = "raspberryToEsp/motionHold";
 
+const char*   publish_topic_hello   = "espToRaspberry/hello";
 const char*   publish_topic         = "espToRaspberry/motionState";
 const char*   publish_topic_1       = "espToRaspberry/motionTimeout";
 const char*   publish_topic_motion  = "espToRaspberry/motionESP01";
+const char*   publish_topic_ssid    = "espToRaspberry/ssid";
+
 
 String        formattedDate;
 String        dayStamp;
@@ -109,7 +115,9 @@ void reconnect() {
     if (client.connect(clientId.c_str())) {
       Serial.println("MQTT broker connected");
       // Once connected, publish an announcement...
-      client.publish("outTopic", "hello world");
+      client.publish(publish_topic_hello, "hello from ESP01 MKE2");
+      client.publish(publish_topic_ssid, ssid);
+
       // ... and resubscribe
       client.subscribe(subscribed_topic);
       client.subscribe(subscribed_topic_1);
@@ -285,7 +293,6 @@ void checkDeviceState(){
     if(automatic) digitalWrite(RELAY,HIGH);
     client.publish(publish_topic_1, msg_timeout);
 
-
     if(automatic && motion_timeout_sec <= 0){
           digitalWrite(RELAY,LOW);
           client.publish(publish_topic_1, "MKE2 Light Off");
@@ -364,11 +371,19 @@ void setup() {
   digitalWrite(RELAY, LOW);   
   digitalWrite(LED02, LOW);
   delay(1000);
+
+  long connectingTime = millis();
   
   WiFi.begin(ssid, pass);
+
     while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
+    if(millis()-connectingTime > 20000){
+        Serial.println("Too long! Changing WiFi SSID");
+        ssid = ssid_1;
+        WiFi.begin(ssid, pass);
+    }
   }
 
   Serial.println("");
