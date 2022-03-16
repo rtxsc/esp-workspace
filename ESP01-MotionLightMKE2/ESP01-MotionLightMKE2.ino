@@ -41,7 +41,7 @@ const char*   subscribed_topic_1    = "raspberryToEsp/automation";
 const char*   subscribed_topic_2    = "raspberryToEsp/motionHold";
 
 const char*   publish_topic_hello   = "espToRaspberry/hello";
-const char*   publish_topic         = "espToRaspberry/motionState";
+const char*   publish_topic_relayState = "espToRaspberry/motionState";
 const char*   publish_topic_1       = "espToRaspberry/motionTimeout";
 const char*   publish_topic_motion  = "espToRaspberry/motionESP01";
 const char*   publish_topic_ssid    = "espToRaspberry/ssid";
@@ -63,7 +63,7 @@ unsigned long lastMsg               = 0;
 unsigned long lastMsg_timeout       = 0;
 
 #define       MSG_BUFFER_SIZE  (50)
-char          msg[MSG_BUFFER_SIZE];
+char          msg_relayState[MSG_BUFFER_SIZE];
 char          msg_timeout[MSG_BUFFER_SIZE];
 char          msg_motion[MSG_BUFFER_SIZE];
 int           value                 = 0;
@@ -146,20 +146,11 @@ void get_ping(){
     if (response.ReceivedResponse)
     {
       Serial.println();
-//      Serial.printf(
-//        "Reply from %s: bytes=%d time=%lums TTL=%d\n",
-//        response.DestIPAddress.toString().c_str(),
-//        response.EchoMessageSize - sizeof(struct icmp_echo_hdr),
-//        response.ResponseTime,
-//        response.TimeToLive);
     }
     else
     {
       Serial.printf("Request timed out.\n");
     }
-
-    // Return true to continue the ping sequence.
-    // If current event returns false, the ping sequence is interrupted.
     return true;
   });
   
@@ -171,64 +162,18 @@ void get_ping(){
     {
       loss = (response.TotalSentRequests - response.TotalReceivedResponses) * 100 / response.TotalSentRequests;
     }
-    
-    // Print packet trip data
-//    Serial.printf(
-//      "Ping statistics for %s:\n",
-//      response.DestIPAddress.toString().c_str());
-      
-//    Serial.printf(
-//      "    Packets: Sent = %lu, Received = %lu, Lost = %lu (%.2f%% loss),\n",
-//      response.TotalSentRequests,
-//      response.TotalReceivedResponses,
-//      response.TotalSentRequests - response.TotalReceivedResponses,
-//      loss);
-
-    // Print time information
-//    if(response.TotalReceivedResponses > 0)
-//    {
-//      Serial.printf("Approximate round trip times in milli-seconds:\n");
-//      Serial.printf(
-//        "    Minimum = %lums, Maximum = %lums, Average = %.2fms\n",
-//        response.MinResponseTime,
-//        response.MaxResponseTime,
-//        response.AvgResponseTime);
-//    }
-    /*
-    // Print host data
-  
-    Serial.printf("Destination host data:\n");
-    Serial.printf(
-      "    IP address: %s\n",
-      response.DestIPAddress.toString().c_str());
-    if(response.DestMacAddress != nullptr)
-    {
-      Serial.printf(
-        "    MAC address: " MACSTR "\n",
-        MAC2STR(response.DestMacAddress->addr));
-    }
-    if(response.DestHostname != "")
-    {
-      Serial.printf(
-        "    DNS name: %s\n",
-        response.DestHostname.c_str());
-    }
-    */
-
     return true;
   });
   
 }
 
 void checkDeviceState(){
-  client.publish(publish_topic_ssid, ssid);
-  delay(100);
   bool relayState   = digitalRead(RELAY);
   bool ledState     = digitalRead(LED02);
   bool motionState  = digitalRead(MOTION);
-  Serial.print("Auto: "); Serial.print(automatic);
+  Serial.print("\nAuto: "); Serial.print(automatic);
   Serial.print("\tRelayState: "); Serial.print(relayState);
-  Serial.print("\tMotion: "); Serial.println(motionState);
+  Serial.print("\t\tMotion: "); Serial.println(motionState);
 
   if(motionState){
       snprintf (msg_motion, MSG_BUFFER_SIZE, "Motion Detected ESP01");
@@ -239,22 +184,18 @@ void checkDeviceState(){
       snprintf (msg_motion, MSG_BUFFER_SIZE, "Motion Not Detected ESP01");
       Serial.print("Publish message: ");
       Serial.println(msg_motion);
-    
     }
-   client.publish(publish_topic_motion, msg_motion);
 
-  delay(100);
   if(relayState){
-      snprintf (msg, MSG_BUFFER_SIZE, "Relay is #1");
+      snprintf (msg_relayState, MSG_BUFFER_SIZE, "Relay is #1");
       Serial.print("Publish message: ");
-      Serial.println(msg);
+      Serial.println(msg_relayState);
    }else{
-      snprintf (msg, MSG_BUFFER_SIZE, "Relay is #0");
+      snprintf (msg_relayState, MSG_BUFFER_SIZE, "Relay is #0");
       Serial.print("Publish message: ");
-      Serial.println(msg);    
+      Serial.println(msg_relayState);    
     }
-   client.publish(publish_topic, msg);
-  delay(100);
+
   if(motionState){
     reset_motion_timeout  = true;
     if(!motion_detected){
@@ -290,10 +231,8 @@ void checkDeviceState(){
     snprintf (msg_timeout, MSG_BUFFER_SIZE, "Timed Out in T -- %s", buff);
     Serial.print("Publish message: ");
     Serial.println(msg_timeout);
-    client.publish(publish_topic_1, msg_timeout);
 
     if(automatic) digitalWrite(RELAY,HIGH);
-    client.publish(publish_topic_1, msg_timeout);
 
     if(automatic && motion_timeout_sec <= 0){
           digitalWrite(RELAY,LOW);
@@ -303,12 +242,16 @@ void checkDeviceState(){
   }
   else{
     // if no more motion but still in automatic
-    if(automatic){
-          digitalWrite(RELAY,LOW);
-      }
-    
+    if(automatic) digitalWrite(RELAY,LOW);
   }
-
+    client.publish(publish_topic_motion, msg_motion);
+    delay(500);
+    client.publish(publish_topic_relayState, msg_relayState);
+    delay(500);
+    client.publish(publish_topic_ssid, ssid);
+    delay(500);
+    client.publish(publish_topic_1, msg_timeout);
+    delay(500);
 }
 
 String getReadableTime(int motion_timeout_sec) {
@@ -419,10 +362,10 @@ void setup() {
   timeClient.begin();
   timeClient.setTimeOffset(28800);
 
-  timer.setInterval(10000L, get_ping);
+  // timer.setInterval(10000L, get_ping);
   timer.setInterval(1000L, checkDeviceState);
-  timer.setInterval(1000L, get_uptime);
-  timer.setInterval(1000L, printTimeNTP);
+  // timer.setInterval(60000L, get_uptime);
+  // timer.setInterval(1000L, printTimeNTP);
 }
 
 // the loop function runs over and over again forever
