@@ -265,7 +265,7 @@ void checkDeviceState(){
   if(motion_detected){
     motion_elapse = millis() - motion_started_ts;
     motion_elapse_sec = motion_elapse / 1000;
-    motion_timeout_sec = motion_hold*60 - motion_elapse_sec;
+    motion_timeout_sec = motion_hold - motion_elapse_sec;
     if(motion_timeout_sec <= 0) {
         motion_timeout_sec = 0;
         client.publish(publish_topic_1, "MKE2 Light Off");
