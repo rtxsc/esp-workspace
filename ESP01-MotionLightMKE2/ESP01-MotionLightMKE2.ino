@@ -35,6 +35,8 @@ WiFiUDP       ntpUDP;
 NTPClient     timeClient(ntpUDP, "pool.ntp.org", 3600, 60000);
 WiFiClient    espClient;
 PubSubClient  client(espClient);
+PubSubClient  client_pir(espClient);
+
 
 const char*   subscribed_topic      = "raspberryToEsp/relayControl";
 const char*   subscribed_topic_1    = "raspberryToEsp/automation";
@@ -107,7 +109,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 void reconnect() {
   // Loop until we're reconnected
   while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
+    Serial.print("Attempting MQTT connection...\n");
     // Create a random client ID
     String clientId = "ESP01_MKE2-";
     clientId += String(random(0xffff), HEX);
@@ -124,6 +126,26 @@ void reconnect() {
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
+void reconnect_pir() {
+  // Loop until we're reconnected
+  while (!client_pir.connected()) {
+    Serial.print("Attempting MQTT connection for PIR client...\n");
+    // Create a random client ID
+    String clientId = "ESP01_PIR-";
+    clientId += String(random(0xffff), HEX);
+    // Attempt to connect
+    if (client_pir.connect(clientId.c_str())) {
+      Serial.println("client_pir broker connected");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client_pir.state());
       Serial.println(" try again in 5 seconds");
       // Wait 5 seconds before retrying
       delay(5000);
@@ -218,8 +240,6 @@ void checkDeviceState(){
     motion_timeout_sec = motion_hold - motion_elapse_sec;
     if(motion_timeout_sec <= 0) {
         motion_timeout_sec = 0;
-        client.publish(publish_topic_1, "MKE2 Light Off");
-        client.publish(publish_topic_1, "MKE2 Light Off");
     }
     // Serial.print("Motion Hold (s): "); Serial.println(motion_timeout_sec);
     String rt = getReadableTime(motion_timeout_sec);
@@ -244,10 +264,7 @@ void checkDeviceState(){
     // if no more motion but still in automatic
     if(automatic) digitalWrite(RELAY,LOW);
   }
-    // client.publish(publish_topic_1, msg_timeout);
-    client.publish(publish_topic_motion, msg_motion);
-    // client.publish(publish_topic_relayState, msg_relayState);
-    // client.publish(publish_topic_ssid, ssid);
+  // client.publish(publish_topic_motion, msg_motion);
 }
 
 String getReadableTime(int motion_timeout_sec) {
@@ -302,6 +319,22 @@ void printTimeNTP(){
 
 }
 
+void push_motionstate(){
+    client_pir.publish(publish_topic_motion, msg_motion);
+}
+
+void push_relaystate(){
+    client.publish(publish_topic_relayState, msg_relayState);
+}
+
+void push_motiontimeout(){
+  client.publish(publish_topic_1, msg_timeout);
+}
+
+void push_ssid(){
+  client.publish(publish_topic_ssid, ssid);
+}
+
 // the setup function runs once when you press reset or power the board
 void setup() {
   // initialize digital pin LED_BUILTIN as an output.
@@ -353,12 +386,18 @@ void setup() {
 
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
-  
+
+  client_pir.setServer(mqtt_server, mqtt_port);
+
   timeClient.begin();
   timeClient.setTimeOffset(28800);
 
   // timer.setInterval(10000L, get_ping);
   timer.setInterval(1000L, checkDeviceState);
+  timer.setInterval(5000L, push_motionstate);
+  timer.setInterval(1000L, push_motiontimeout);
+  // timer.setInterval(1000L, push_relaystate);
+  // timer.setInterval(1000L, push_ssid);
   // timer.setInterval(60000L, get_uptime);
   // timer.setInterval(1000L, printTimeNTP);
 }
@@ -367,6 +406,9 @@ void setup() {
 void loop() {
   if (!client.connected()) {
     reconnect();
+  }
+  if (!client_pir.connected()) {
+    reconnect_pir();
   }
   client.loop();
   timer.run();
