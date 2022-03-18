@@ -41,12 +41,7 @@ const char*   subscribed_topic      = "raspberryToEsp/relayControl";
 const char*   subscribed_topic_1    = "raspberryToEsp/automation";
 const char*   subscribed_topic_2    = "raspberryToEsp/motionHold";
 
-const char*   publish_topic_hello   = "espToRaspberry/hello";
-const char*   publish_topic_relayState = "espToRaspberry/motionState";
-const char*   publish_topic_1       = "espToRaspberry/motionTimeout";
-const char*   publish_topic_motion  = "espToRaspberry/motionESP01";
-const char*   publish_topic_ssid    = "espToRaspberry/ssid";
-
+const char*   publish_topic_payload   = "espToRaspberry/allpayload";
 
 String        formattedDate;
 String        dayStamp;
@@ -64,9 +59,11 @@ unsigned long lastMsg               = 0;
 unsigned long lastMsg_timeout       = 0;
 
 #define       MSG_BUFFER_SIZE  (50)
+#define       MSG_ALL_BUFFER_SIZE  (200)
 char          msg_relayState[MSG_BUFFER_SIZE];
 char          msg_timeout[MSG_BUFFER_SIZE];
 char          msg_motion[MSG_BUFFER_SIZE];
+char          msg_all[MSG_ALL_BUFFER_SIZE];
 int           value                 = 0;
 
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -221,9 +218,22 @@ void checkDeviceState(){
 
     if(automatic && motion_timeout_sec <= 0){
           digitalWrite(RELAY,LOW);
-          client.publish(publish_topic_1, "MKE2 Light Off");
+          client.publish(publish_topic_payload, "MKE2 Light Off");
           motion_detected = false;
     }
+
+    strcat(msg_all,msg_motion); 
+    strcat(msg_all,","); 
+    strcat(msg_all,msg_relayState); 
+    strcat(msg_all,","); 
+    strcat(msg_all,msg_timeout);
+    strcat(msg_all,","); 
+    strcat(msg_all,ssid);  
+    Serial.print("all messages: "); Serial.println(msg_all);
+    snprintf (msg_all, MSG_ALL_BUFFER_SIZE, msg_all);
+    client.publish(publish_topic_payload, msg_all);
+    strcpy(msg_all, "");
+
   }
   else{
     // if no more motion but still in automatic
@@ -281,22 +291,6 @@ void printTimeNTP(){
 
 }
 
-void push_motionstate(){
-    client.publish(publish_topic_motion, msg_motion);
-}
-
-void push_relaystate(){
-    client.publish(publish_topic_relayState, msg_relayState);
-}
-
-void push_motiontimeout(){
-  client.publish(publish_topic_1, msg_timeout);
-}
-
-void push_ssid(){
-  client.publish(publish_topic_ssid, ssid);
-}
-
 // the setup function runs once when you press reset or power the board
 void setup() {
   // initialize digital pin LED_BUILTIN as an output.
@@ -339,8 +333,6 @@ void setup() {
           ESP.restart();
       }
   }
-
-
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
@@ -352,12 +344,9 @@ void setup() {
   timeClient.begin();
   timeClient.setTimeOffset(28800);
 
-  // timer.setInterval(10000L, get_ping);
   timer.setInterval(1000L, checkDeviceState);
-  timer.setInterval(1000L, push_motionstate);
-  timer.setInterval(1000L, push_motiontimeout);
-  timer.setInterval(1000L, push_relaystate);
-  timer.setInterval(10000L, push_ssid);
+
+  // timer.setInterval(10000L, get_ping);
   // timer.setInterval(60000L, get_uptime);
   // timer.setInterval(1000L, printTimeNTP);
 }
