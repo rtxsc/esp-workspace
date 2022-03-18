@@ -115,9 +115,7 @@ void reconnect() {
     // Attempt to connect
     if (client.connect(clientId.c_str())) {
       Serial.println("MQTT broker connected");
-      // Once connected, publish an announcement...
-      client.publish(publish_topic_hello, "hello from ESP01 MKE2");
-      // client.publish(publish_topic_ssid, ssid);
+
       // ... and resubscribe
       client.subscribe(subscribed_topic);
       client.subscribe(subscribed_topic_1);
@@ -231,7 +229,6 @@ void checkDeviceState(){
     // if no more motion but still in automatic
     if(automatic) digitalWrite(RELAY,LOW);
   }
-  // client.publish(publish_topic_motion, msg_motion);
 }
 
 String getReadableTime(int motion_timeout_sec) {
@@ -357,9 +354,9 @@ void setup() {
 
   // timer.setInterval(10000L, get_ping);
   timer.setInterval(1000L, checkDeviceState);
-  timer.setInterval(5000L, push_motionstate);
+  timer.setInterval(1000L, push_motionstate);
   timer.setInterval(1000L, push_motiontimeout);
-  timer.setInterval(5000L, push_relaystate);
+  timer.setInterval(1000L, push_relaystate);
   timer.setInterval(10000L, push_ssid);
   // timer.setInterval(60000L, get_uptime);
   // timer.setInterval(1000L, printTimeNTP);
