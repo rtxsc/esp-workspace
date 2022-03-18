@@ -58,8 +58,8 @@ int           motion_hold           = 10;
 unsigned long lastMsg               = 0;
 unsigned long lastMsg_timeout       = 0;
 
-#define       MSG_BUFFER_SIZE  (50)
-#define       MSG_ALL_BUFFER_SIZE  (200)
+#define       MSG_BUFFER_SIZE       (50)
+#define       MSG_ALL_BUFFER_SIZE   (200)
 char          msg_relayState[MSG_BUFFER_SIZE];
 char          msg_timeout[MSG_BUFFER_SIZE];
 char          msg_motion[MSG_BUFFER_SIZE];
@@ -166,9 +166,11 @@ void checkDeviceState(){
   bool relayState   = digitalRead(RELAY);
   bool ledState     = digitalRead(LED02);
   bool motionState  = digitalRead(MOTION);
-  Serial.print("\nAuto: "); Serial.print(automatic);
-  Serial.print("\tRelayState: "); Serial.print(relayState);
-  Serial.print("\t\tMotion: "); Serial.println(motionState);
+  const char *up_esp01  = get_uptime();
+
+  // Serial.print("\nAuto: "); Serial.print(automatic);
+  // Serial.print("\tRelayState: "); Serial.print(relayState);
+  // Serial.print("\t\tMotion: "); Serial.println(motionState);
 
   if(motionState){
       snprintf (msg_motion, MSG_BUFFER_SIZE, "Motion Detected ESP01");
@@ -218,27 +220,29 @@ void checkDeviceState(){
 
     if(automatic && motion_timeout_sec <= 0){
           digitalWrite(RELAY,LOW);
+          // snprintf (msg_relayState, MSG_BUFFER_SIZE, "Relay is #0");  // added to make relay #0 sent to Pi 18.03.2022
           // client.publish(publish_topic_payload, "MKE2 Light Off"); // cant do this anymore since Python turn this into spliced array
           motion_detected = false;
     }
-
-    strcat(msg_all,msg_motion); 
-    strcat(msg_all,","); 
-    strcat(msg_all,msg_relayState); 
-    strcat(msg_all,","); 
-    strcat(msg_all,msg_timeout);
-    strcat(msg_all,","); 
-    strcat(msg_all,ssid);  
-    Serial.print("all messages: "); Serial.println(msg_all);
-    snprintf (msg_all, MSG_ALL_BUFFER_SIZE, msg_all);
-    client.publish(publish_topic_payload, msg_all);
-    strcpy(msg_all, "");
-
   }
   else{
     // if no more motion but still in automatic
     if(automatic) digitalWrite(RELAY,LOW);
   }
+  // concatenate individual msg into a csv array (list in Python)
+  strcat(msg_all,msg_motion); 
+  strcat(msg_all,","); 
+  strcat(msg_all,msg_relayState); 
+  strcat(msg_all,","); 
+  strcat(msg_all,msg_timeout);
+  strcat(msg_all,","); 
+  strcat(msg_all,ssid);
+  strcat(msg_all,","); 
+  strcat(msg_all,up_esp01);
+  // Serial.print("all messages: "); Serial.println(msg_all);
+  snprintf (msg_all, MSG_ALL_BUFFER_SIZE, msg_all);
+  client.publish(publish_topic_payload, msg_all);
+  strcpy(msg_all, "");
 }
 
 String getReadableTime(int motion_timeout_sec) {
@@ -276,8 +280,9 @@ String getReadableTime(int motion_timeout_sec) {
   return readableTime;
 }
 
-void get_uptime(){
+const char* get_uptime(){
   String uptime = String(uptime_formatter::getUptime()); 
+  return uptime.c_str();
 }
 
 
@@ -345,9 +350,7 @@ void setup() {
   timeClient.setTimeOffset(28800);
 
   timer.setInterval(1000L, checkDeviceState);
-
   // timer.setInterval(10000L, get_ping);
-  // timer.setInterval(60000L, get_uptime);
   // timer.setInterval(1000L, printTimeNTP);
 }
 
