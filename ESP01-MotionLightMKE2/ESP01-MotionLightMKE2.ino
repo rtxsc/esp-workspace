@@ -218,7 +218,7 @@ void checkDeviceState(){
 
     if(automatic && motion_timeout_sec <= 0){
           digitalWrite(RELAY,LOW);
-          client.publish(publish_topic_payload, "MKE2 Light Off");
+          // client.publish(publish_topic_payload, "MKE2 Light Off"); // cant do this anymore since Python turn this into spliced array
           motion_detected = false;
     }
 
