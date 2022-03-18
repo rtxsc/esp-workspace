@@ -35,7 +35,6 @@ WiFiUDP       ntpUDP;
 NTPClient     timeClient(ntpUDP, "pool.ntp.org", 3600, 60000);
 WiFiClient    espClient;
 PubSubClient  client(espClient);
-PubSubClient  client_pir(espClient);
 
 
 const char*   subscribed_topic      = "raspberryToEsp/relayControl";
@@ -133,26 +132,6 @@ void reconnect() {
   }
 }
 
-void reconnect_pir() {
-  // Loop until we're reconnected
-  while (!client_pir.connected()) {
-    Serial.print("Attempting MQTT connection for PIR client...\n");
-    // Create a random client ID
-    String clientId = "ESP01_PIR-";
-    clientId += String(random(0xffff), HEX);
-    // Attempt to connect
-    if (client_pir.connect(clientId.c_str())) {
-      Serial.println("client_pir broker connected");
-    } else {
-      Serial.print("failed, rc=");
-      Serial.print(client_pir.state());
-      Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
-    }
-  }
-}
-
 
 void get_ping(){
 
@@ -198,23 +177,15 @@ void checkDeviceState(){
 
   if(motionState){
       snprintf (msg_motion, MSG_BUFFER_SIZE, "Motion Detected ESP01");
-      Serial.print("Publish message: ");
-      // Serial.println(msg_motion);
    }
    else{
       snprintf (msg_motion, MSG_BUFFER_SIZE, "Motion Not Detected ESP01");
-      Serial.print("Publish message: ");
-      // Serial.println(msg_motion);
     }
 
   if(relayState){
       snprintf (msg_relayState, MSG_BUFFER_SIZE, "Relay is #1");
-      Serial.print("Publish message: ");
-      // Serial.println(msg_relayState);
    }else{
-      snprintf (msg_relayState, MSG_BUFFER_SIZE, "Relay is #0");
-      Serial.print("Publish message: ");
-      // Serial.println(msg_relayState);    
+      snprintf (msg_relayState, MSG_BUFFER_SIZE, "Relay is #0");   
     }
 
   if(motionState){
@@ -247,11 +218,7 @@ void checkDeviceState(){
 
     char buff[MSG_BUFFER_SIZE];
     rt.toCharArray(buff, MSG_BUFFER_SIZE);
-
     snprintf (msg_timeout, MSG_BUFFER_SIZE, "Timed Out in T -- %s", buff);
-    // Serial.print("Publish message: ");
-    // Serial.println(msg_timeout);
-
     if(automatic) digitalWrite(RELAY,HIGH);
 
     if(automatic && motion_timeout_sec <= 0){
@@ -304,7 +271,6 @@ String getReadableTime(int motion_timeout_sec) {
 
 void get_uptime(){
   String uptime = String(uptime_formatter::getUptime()); 
-//  Serial.println(uptime);
 }
 
 
@@ -315,12 +281,11 @@ void printTimeNTP(){
   int splitT = formattedDate.indexOf("T");
   dayStamp = formattedDate.substring(0, splitT);
   String dateTime = "Now " + timeClient.getFormattedTime() + "\t\t" + dayStamp;
-//  Serial.println(dateTime);
 
 }
 
 void push_motionstate(){
-    client_pir.publish(publish_topic_motion, msg_motion);
+    client.publish(publish_topic_motion, msg_motion);
 }
 
 void push_relaystate(){
@@ -387,8 +352,6 @@ void setup() {
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
 
-  client_pir.setServer(mqtt_server, mqtt_port);
-
   timeClient.begin();
   timeClient.setTimeOffset(28800);
 
@@ -396,8 +359,8 @@ void setup() {
   timer.setInterval(1000L, checkDeviceState);
   timer.setInterval(5000L, push_motionstate);
   timer.setInterval(1000L, push_motiontimeout);
-  // timer.setInterval(1000L, push_relaystate);
-  // timer.setInterval(1000L, push_ssid);
+  timer.setInterval(5000L, push_relaystate);
+  timer.setInterval(10000L, push_ssid);
   // timer.setInterval(60000L, get_uptime);
   // timer.setInterval(1000L, printTimeNTP);
 }
@@ -406,9 +369,6 @@ void setup() {
 void loop() {
   if (!client.connected()) {
     reconnect();
-  }
-  if (!client_pir.connected()) {
-    reconnect_pir();
   }
   client.loop();
   timer.run();
