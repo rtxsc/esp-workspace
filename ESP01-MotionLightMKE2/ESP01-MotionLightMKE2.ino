@@ -117,7 +117,6 @@ void reconnect() {
       // Once connected, publish an announcement...
       client.publish(publish_topic_hello, "hello from ESP01 MKE2");
       // client.publish(publish_topic_ssid, ssid);
-
       // ... and resubscribe
       client.subscribe(subscribed_topic);
       client.subscribe(subscribed_topic_1);
@@ -178,22 +177,22 @@ void checkDeviceState(){
   if(motionState){
       snprintf (msg_motion, MSG_BUFFER_SIZE, "Motion Detected ESP01");
       Serial.print("Publish message: ");
-      Serial.println(msg_motion);
+      // Serial.println(msg_motion);
    }
    else{
       snprintf (msg_motion, MSG_BUFFER_SIZE, "Motion Not Detected ESP01");
       Serial.print("Publish message: ");
-      Serial.println(msg_motion);
+      // Serial.println(msg_motion);
     }
 
   if(relayState){
       snprintf (msg_relayState, MSG_BUFFER_SIZE, "Relay is #1");
       Serial.print("Publish message: ");
-      Serial.println(msg_relayState);
+      // Serial.println(msg_relayState);
    }else{
       snprintf (msg_relayState, MSG_BUFFER_SIZE, "Relay is #0");
       Serial.print("Publish message: ");
-      Serial.println(msg_relayState);    
+      // Serial.println(msg_relayState);    
     }
 
   if(motionState){
@@ -220,17 +219,18 @@ void checkDeviceState(){
     if(motion_timeout_sec <= 0) {
         motion_timeout_sec = 0;
         client.publish(publish_topic_1, "MKE2 Light Off");
+        client.publish(publish_topic_1, "MKE2 Light Off");
     }
-    Serial.print("Motion Hold (s): "); Serial.println(motion_timeout_sec);
+    // Serial.print("Motion Hold (s): "); Serial.println(motion_timeout_sec);
     String rt = getReadableTime(motion_timeout_sec);
-    Serial.print("ReadableTime: "); Serial.println(rt);
+    // Serial.print("ReadableTime: "); Serial.println(rt);
 
     char buff[MSG_BUFFER_SIZE];
     rt.toCharArray(buff, MSG_BUFFER_SIZE);
 
     snprintf (msg_timeout, MSG_BUFFER_SIZE, "Timed Out in T -- %s", buff);
-    Serial.print("Publish message: ");
-    Serial.println(msg_timeout);
+    // Serial.print("Publish message: ");
+    // Serial.println(msg_timeout);
 
     if(automatic) digitalWrite(RELAY,HIGH);
 
@@ -244,14 +244,10 @@ void checkDeviceState(){
     // if no more motion but still in automatic
     if(automatic) digitalWrite(RELAY,LOW);
   }
+    // client.publish(publish_topic_1, msg_timeout);
     client.publish(publish_topic_motion, msg_motion);
-    delay(500);
-    client.publish(publish_topic_relayState, msg_relayState);
-    delay(500);
-    client.publish(publish_topic_ssid, ssid);
-    delay(500);
-    client.publish(publish_topic_1, msg_timeout);
-    delay(500);
+    // client.publish(publish_topic_relayState, msg_relayState);
+    // client.publish(publish_topic_ssid, ssid);
 }
 
 String getReadableTime(int motion_timeout_sec) {
@@ -348,7 +344,6 @@ void setup() {
           ESP.restart();
       }
   }
-
 
 
   Serial.println("");
