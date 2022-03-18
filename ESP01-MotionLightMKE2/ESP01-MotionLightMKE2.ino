@@ -282,6 +282,15 @@ String getReadableTime(int motion_timeout_sec) {
 
 const char* get_uptime(){
   String uptime = String(uptime_formatter::getUptime()); 
+  for (int i = 0, len = uptime.length(); i < len; i++)
+  {
+      // check whether parsing character is punctuation or not  (we want to remove comma from uptime)
+      if (ispunct(uptime[i]))
+      {
+          uptime.remove(i--, 1);
+          len = uptime.length();
+      }
+  }
   return uptime.c_str();
 }
 
