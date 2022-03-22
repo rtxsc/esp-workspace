@@ -303,7 +303,7 @@ const char* get_uptime(){
           len = uptime.length();
       }
   }
-  if(strcmp(uptime,"~")==0) uptime = String(uptime_formatter::getUptime()); 
+  if(strcmp(uptime.c_str(),"~")==0) uptime = String(uptime_formatter::getUptime()); 
   return uptime.c_str();
 }
 
