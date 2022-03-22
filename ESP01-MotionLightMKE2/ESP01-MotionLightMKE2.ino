@@ -106,9 +106,11 @@ const char*   subscribed_topic_r    = "raspberryToEsp/esp01restart";
   }
 
   if(strcmp(topic,subscribed_topic_r)==0){
-    Serial.println("ESP01-restart requested");
-    delay(1000);
-    ESP.restart();
+    if ((char)payload[0] == '1') {
+      // Serial.println("ESP01-restart requested");
+      delay(1000);
+      ESP.restart();
+    }
   }
 }
 
