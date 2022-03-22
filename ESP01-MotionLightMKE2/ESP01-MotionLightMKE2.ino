@@ -40,6 +40,7 @@ PubSubClient  client(espClient);
 const char*   subscribed_topic      = "raspberryToEsp/relayControl";
 const char*   subscribed_topic_1    = "raspberryToEsp/automation";
 const char*   subscribed_topic_2    = "raspberryToEsp/motionHold";
+const char*   subscribed_topic_r    = "raspberryToEsp/esp01restart";
 
 const char*   publish_topic_payload   = "espToRaspberry/allpayload";
 
@@ -74,32 +75,41 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Serial.print((char)payload[i]);
   }
   Serial.println();
+  /*
+const char*   subscribed_topic      = "raspberryToEsp/relayControl";
+const char*   subscribed_topic_1    = "raspberryToEsp/automation";
+const char*   subscribed_topic_2    = "raspberryToEsp/motionHold";
+const char*   subscribed_topic_r    = "raspberryToEsp/esp01restart";
+  */
 
-  // condition to handle automation toggle
-  if(strcmp(topic,subscribed_topic_1)==0){
-      if ((char)payload[0] == 'a')  automatic = true;
-      else                          automatic = false;
-  }
-
- if(strcmp(topic,subscribed_topic)==0){
-  // Switch on the LED if an 1 was received as first character
-  if ((char)payload[0] == '1') {
-    Serial.println("Turn ON RELAY");
-    if(!automatic) digitalWrite(RELAY, HIGH);   
-  } else {
-    Serial.println("Turn OFF RELAY");
-    if(!automatic) digitalWrite(RELAY, LOW); 
-  }
+  if(strcmp(topic,subscribed_topic)==0){
+    // Switch on the LED if an 1 was received as first character
+    if ((char)payload[0] == '1') {
+      // Serial.println("Turn ON RELAY");
+      if(!automatic) digitalWrite(RELAY, HIGH);   
+    } else {
+      // Serial.println("Turn OFF RELAY");
+      if(!automatic) digitalWrite(RELAY, LOW); 
+    }
  }
-
-   if(strcmp(topic,subscribed_topic_2)==0){
-     String recv_payload = String(( char *) payload);
-     motion_hold = recv_payload.toInt();
-    Serial.print("Motion Hold as Int:");
-     Serial.println(motion_hold);
-
+   // condition to handle automation toggle
+  if(strcmp(topic,subscribed_topic_1)==0){
+    if ((char)payload[0] == 'a')  automatic = true;
+    else                          automatic = false;
   }
 
+  if(strcmp(topic,subscribed_topic_2)==0){
+    String recv_payload = String(( char *) payload);
+    motion_hold = recv_payload.toInt();
+    // Serial.print("Motion Hold as Int:");
+    // Serial.println(motion_hold);
+  }
+
+  if(strcmp(topic,subscribed_topic_r)==0){
+    Serial.println("ESP01-restart requested");
+    delay(1000);
+    ESP.restart();
+  }
 }
 
 void reconnect() {
@@ -117,6 +127,8 @@ void reconnect() {
       client.subscribe(subscribed_topic);
       client.subscribe(subscribed_topic_1);
       client.subscribe(subscribed_topic_2);
+      client.subscribe(subscribed_topic_r);
+
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -242,7 +254,7 @@ void checkDeviceState(){
   // Serial.print("all messages: "); Serial.println(msg_all);
   snprintf (msg_all, MSG_ALL_BUFFER_SIZE, msg_all);
   client.publish(publish_topic_payload, msg_all);
-  strcpy(msg_all, "");
+  strcpy(msg_all, ""); //  empty the array for the next msg
 }
 
 String getReadableTime(int motion_timeout_sec) {
@@ -291,9 +303,9 @@ const char* get_uptime(){
           len = uptime.length();
       }
   }
+  if(strcmp(uptime,"~")==0) uptime = String(uptime_formatter::getUptime()); 
   return uptime.c_str();
 }
-
 
 void printTimeNTP(){
   timeClient.update();
@@ -329,7 +341,7 @@ void setup() {
       Serial.println(elapse/1000);
       if(millis()-connectingTime > 20000){
           Serial.println("Cant connect to ssid_0! Changing WiFi SSID to ssid_1");
-          ssid = ssid_1;
+          ssid = ssid_1; // changing to ssid_1 before the next WiFi.begin
           break;
       }
   }
