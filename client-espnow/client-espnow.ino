@@ -5,7 +5,7 @@
 #include <DHT.h>
 
 // Set your Board ID (ESP32 Sender #1 = BOARD_ID 1, ESP32 Sender #2 = BOARD_ID 2, etc)
-#define BOARD_ID 1
+#define BOARD_ID 2
 
 // Digital pin connected to the DHT sensor
 #define DHTPIN 4  
@@ -33,7 +33,7 @@ typedef struct struct_message {
 struct_message myData;
 
 unsigned long previousMillis = 0;   // Stores last time temperature was published
-const long interval = 10000;        // Interval at which to publish sensor readings
+const long interval = 1000;        // Interval at which to publish sensor readings
 
 unsigned int readingId = 0;
 

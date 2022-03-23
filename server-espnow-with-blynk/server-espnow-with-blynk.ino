@@ -84,6 +84,20 @@ const char* ssid = "NPRDC CELCOM M2";
 const char* pass = "nprdc1234";
 const char* remote_host = "blynk.cloud";
 
+int board_id = 0;
+
+String jsonString = "None";
+String dt = "None";
+int temp = 0;
+int humi = 0;
+int read_id = 0;
+
+String jsonString2 = "None";
+String dt2 = "None";
+int temp2 = 0;
+int humi2 = 0;
+int read_id2 = 0;
+
 // Structure example to receive data
 // Must match the sender structure
 typedef struct struct_message {
@@ -221,6 +235,17 @@ void myTimerEvent()
   Blynk.virtualWrite(V10, millis() / 1000);
 }
 
+String get_timestamp(){
+  timeClient.update();
+  formattedDate = timeClient.getFormattedDate();
+  // Extract date
+  int splitT = formattedDate.indexOf("T");
+  dayStamp = formattedDate.substring(0, splitT);
+  String dateTime = timeClient.getFormattedTime() + " " + dayStamp;
+  return dateTime;
+
+}
+
 void printTimeNTP(){
   lcd.clear();
   timeClient.update();
@@ -234,6 +259,15 @@ void printTimeNTP(){
   lcd.print(dateTime);
   Blynk.virtualWrite(V10,uptime_formatter::getUptime());
   Blynk.virtualWrite(V11, dateTime);
+  Blynk.virtualWrite(V13,jsonString + " | Received at: " + dt);
+  Blynk.virtualWrite(V20,temp);
+  Blynk.virtualWrite(V21,humi);
+  Blynk.virtualWrite(V22,read_id);
+
+  Blynk.virtualWrite(V14,jsonString2 + " | Received at: " + dt2);
+  Blynk.virtualWrite(V24,temp2);
+  Blynk.virtualWrite(V25,humi2);
+  Blynk.virtualWrite(V26,read_id2);
 
 }
 
@@ -275,21 +309,40 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
            mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
   Serial.println(macStr);
   memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
-  
+
   board["id"] = incomingReadings.id;
   board["temperature"] = incomingReadings.temp;
   board["humidity"] = incomingReadings.hum;
   board["readingId"] = String(incomingReadings.readingId);
-  String jsonString = JSON.stringify(board);
-  events.send(jsonString.c_str(), "new_readings", millis());
-  
-  Serial.printf("Board ID %u: %u bytes\n", incomingReadings.id, len);
-  Serial.printf("t value: %4.2f \n", incomingReadings.temp);
-  Serial.printf("h value: %4.2f \n", incomingReadings.hum);
-  Serial.printf("readingID value: %d \n", incomingReadings.readingId);
-  Serial.println();
-}
 
+  if(incomingReadings.id == 1){
+    temp = incomingReadings.temp;
+    humi = incomingReadings.hum;
+    read_id = incomingReadings.readingId;
+    dt = get_timestamp();
+    jsonString = JSON.stringify(board);
+    // events.send(jsonString.c_str(), "new_readings", millis());
+    Serial.printf("Board ID %u: %u bytes\n", incomingReadings.id, len);
+    Serial.printf("temp value: %4.2f \n", temp);
+    Serial.printf("humi value: %4.2f \n", humi);
+    Serial.printf("readingID value: %d \n", read_id);
+    Serial.println();
+  }
+  else{
+    temp2 = incomingReadings.temp;
+    humi2 = incomingReadings.hum;
+    read_id2 = incomingReadings.readingId;
+    dt2 = get_timestamp();
+    jsonString2 = JSON.stringify(board);
+    // events.send(jsonString2.c_str(), "new_readings", millis());
+    Serial.printf("2-Board ID %u: %u bytes\n", incomingReadings.id, len);
+    Serial.printf("2-temp value: %4.2f \n", temp2);
+    Serial.printf("2-humi value: %4.2f \n", humi2);
+    Serial.printf("2-readingID value: %d \n", read_id2);
+    Serial.println();
+  }
+  
+}
 
 void ESPNOW_HandlerTask(void * pvParameters) // previously void loop()
 {
@@ -381,40 +434,16 @@ void setup() {
         column_index_left--;
 
         if(column_index_right>16 && column_index_left<0) {
-          #ifdef USE_RGB_LED
-            #ifndef AASAS_TPLINK
-            rgbOff();
-            #endif
-          #endif
           column_index_right  = init_index_right; 
           column_index_left   = init_index_left;
           lcd.clear();
           if(millis()/1000 % 2 == 0){
               lcd.setCursor(0, 0); // row 1, column 0
               lcd.print("Connecting WiFi");  
-          #ifdef USE_BLUE_LED
-            digitalWrite(BLUE_LED, HIGH); 
-          #elif defined USE_RGB_LED 
-            #ifndef AASAS_TPLINK
-            setRGBtoWhite();
-            #endif
-            onOK_LED();
-            onSELECT_LED();
-          #endif
-
           }
           else{
               lcd.setCursor(0, 0); // row 1, column 0
               lcd.print(String(ssid));
-          #ifdef USE_BLUE_LED
-            digitalWrite(BLUE_LED, LOW); 
-          #elif defined USE_RGB_LED
-            #ifndef AASAS_TPLINK
-            rgbOff();
-            #endif
-            offOK_LED();
-            offSELECT_LED();
-          #endif  
           }
       
         }
@@ -490,7 +519,6 @@ void setup() {
   delay(500); 
 }
 
- 
 void loop() {
   Blynk.run();
   timer.run();
