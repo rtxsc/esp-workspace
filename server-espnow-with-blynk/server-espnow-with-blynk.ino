@@ -86,16 +86,16 @@ const char* remote_host = "blynk.cloud";
 
 int board_id = 0;
 
-String jsonString = "None";
-String dt = "None";
-int temp = 0;
-int humi = 0;
-int read_id = 0;
+String jsonString1 = "None";
+String dt1 = "None";
+float temp1 = 0;
+float humi1 = 0;
+int read_id1 = 0;
 
 String jsonString2 = "None";
 String dt2 = "None";
-int temp2 = 0;
-int humi2 = 0;
+float temp2 = 0;
+float humi2 = 0;
 int read_id2 = 0;
 
 // Structure example to receive data
@@ -259,10 +259,10 @@ void printTimeNTP(){
   lcd.print(dateTime);
   Blynk.virtualWrite(V10,uptime_formatter::getUptime());
   Blynk.virtualWrite(V11, dateTime);
-  Blynk.virtualWrite(V13,jsonString + " | Received at: " + dt);
-  Blynk.virtualWrite(V20,temp);
-  Blynk.virtualWrite(V21,humi);
-  Blynk.virtualWrite(V22,read_id);
+  Blynk.virtualWrite(V13,jsonString1 + " | Received at: " + dt1);
+  Blynk.virtualWrite(V20,temp1);
+  Blynk.virtualWrite(V21,humi1);
+  Blynk.virtualWrite(V22,read_id1);
 
   Blynk.virtualWrite(V14,jsonString2 + " | Received at: " + dt2);
   Blynk.virtualWrite(V24,temp2);
@@ -314,13 +314,18 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
   board["temperature"] = incomingReadings.temp;
   board["humidity"] = incomingReadings.hum;
   board["readingId"] = String(incomingReadings.readingId);
+  // temp = incomingReadings.temp;
+  // humi = incomingReadings.hum;
+  // read_id = incomingReadings.readingId;
+  // dt = get_timestamp();
+  // jsonString = JSON.stringify(board);
 
   if(incomingReadings.id == 1){
-    temp = incomingReadings.temp;
-    humi = incomingReadings.hum;
-    read_id = incomingReadings.readingId;
-    dt = get_timestamp();
-    jsonString = JSON.stringify(board);
+    temp1 = incomingReadings.temp;
+    humi1 = incomingReadings.hum;
+    read_id1 = incomingReadings.readingId;
+    dt1 = get_timestamp();
+    jsonString1 = JSON.stringify(board);
     // events.send(jsonString.c_str(), "new_readings", millis());
     Serial.printf("Board ID %u: %u bytes\n", incomingReadings.id, len);
     Serial.printf("temp value: %4.2f \n", temp);
@@ -328,7 +333,7 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     Serial.printf("readingID value: %d \n", read_id);
     Serial.println();
   }
-  else{
+  else if(incomingReadings.id == 2){
     temp2 = incomingReadings.temp;
     humi2 = incomingReadings.hum;
     read_id2 = incomingReadings.readingId;
@@ -340,6 +345,9 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     Serial.printf("2-humi value: %4.2f \n", humi2);
     Serial.printf("2-readingID value: %d \n", read_id2);
     Serial.println();
+  }
+  else{
+    Serial.println("No payload received");
   }
   
 }
