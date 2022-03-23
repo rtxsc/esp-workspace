@@ -314,11 +314,7 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
   board["temperature"] = incomingReadings.temp;
   board["humidity"] = incomingReadings.hum;
   board["readingId"] = String(incomingReadings.readingId);
-  // temp = incomingReadings.temp;
-  // humi = incomingReadings.hum;
-  // read_id = incomingReadings.readingId;
-  // dt = get_timestamp();
-  // jsonString = JSON.stringify(board);
+
 
   if(incomingReadings.id == 1){
     temp1 = incomingReadings.temp;
@@ -361,11 +357,11 @@ void ESPNOW_HandlerTask(void * pvParameters) // previously void loop()
     Serial.println("Error initializing ESP-NOW");
     return;
   }
-  
   // Once ESPNow is successfully Init, we will register for recv CB to
   // get recv packer info
   esp_now_register_recv_cb(OnDataRecv);
 
+  /* DISABLING LOCAL SERVER IN FAVOR OF BLYNK OPERATIONS FREEING UP MORE CPU RESOURCES 24.03.2022*/
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send_P(200, "text/html", index_html);
   });
@@ -380,9 +376,6 @@ void ESPNOW_HandlerTask(void * pvParameters) // previously void loop()
   });
   server.addHandler(&events);
   server.begin();
-
-
-
   for(;;){    
       static unsigned long lastEventTime = millis();
       static const unsigned long EVENT_INTERVAL_MS = 5000;
