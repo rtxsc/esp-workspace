@@ -19,7 +19,9 @@
 #include "uptime_formatter.h"
 #include "uptime.h"
 
-TaskHandle_t Task1;
+TaskHandle_t Task1; // ESPNOW
+TaskHandle_t Task2; // BLYNK
+
 AsyncWebServer server(80);
 AsyncEventSource events("/events");
 
@@ -323,11 +325,11 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     dt1 = get_timestamp();
     jsonString1 = JSON.stringify(board);
     // events.send(jsonString.c_str(), "new_readings", millis());
-    Serial.printf("Board ID %u: %u bytes\n", incomingReadings.id, len);
-    Serial.printf("temp value: %4.2f \n", temp1);
-    Serial.printf("humi value: %4.2f \n", humi1);
-    Serial.printf("readingID value: %d \n", read_id1);
-    Serial.println();
+    // Serial.printf("Board ID %u: %u bytes\n", incomingReadings.id, len);
+    // Serial.printf("temp value: %4.2f \n", temp1);
+    // Serial.printf("humi value: %4.2f \n", humi1);
+    // Serial.printf("readingID value: %d \n", read_id1);
+    // Serial.println();
   }
   else if(incomingReadings.id == 2){
     temp2 = incomingReadings.temp;
@@ -336,11 +338,11 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     dt2 = get_timestamp();
     jsonString2 = JSON.stringify(board);
     // events.send(jsonString2.c_str(), "new_readings", millis());
-    Serial.printf("2-Board ID %u: %u bytes\n", incomingReadings.id, len);
-    Serial.printf("2-temp value: %4.2f \n", temp2);
-    Serial.printf("2-humi value: %4.2f \n", humi2);
-    Serial.printf("2-readingID value: %d \n", read_id2);
-    Serial.println();
+    // Serial.printf("2-Board ID %u: %u bytes\n", incomingReadings.id, len);
+    // Serial.printf("2-temp value: %4.2f \n", temp2);
+    // Serial.printf("2-humi value: %4.2f \n", humi2);
+    // Serial.printf("2-readingID value: %d \n", read_id2);
+    // Serial.println();
   }
   else{
     Serial.println("No payload received");
@@ -384,6 +386,21 @@ void ESPNOW_HandlerTask(void * pvParameters) // previously void loop()
         lastEventTime = millis();
     }
   }
+} // end of FreeRTOS handler
+
+void BLYNK_HandlerTask(void * pvParameters) // previously void loop()
+{
+  #ifdef USE_RTC
+    timer.setInterval(1000L, printTimeRTC);
+  #else
+    timer.setInterval(1000L, printTimeNTP);
+  #endif
+  Serial.print("BLYNK_HandlerTask running on core ");
+  Serial.println(xPortGetCoreID());
+    for(;;){    
+      Blynk.run();
+      timer.run();
+    }
 } // end of FreeRTOS handler
 
 void setup() {
@@ -503,25 +520,35 @@ void setup() {
   Serial.println(WiFi.localIP());
   // timer.setInterval(100, handle_server_event);
   // timer.setInterval(15000L, Get_Ping);
-  #ifdef USE_RTC
-    timer.setInterval(1000L, printTimeRTC);
-  #else
-    timer.setInterval(1000L, printTimeNTP);
-  #endif
+
 
   xTaskCreatePinnedToCore(
-                    ESPNOW_HandlerTask,       /* Task function. */
-                    "ESPNOW_HandlerTask",     /* name of task. */
-                    10000,                    /* Stack size of task */
-                    NULL,                     /* parameter of the task */
-                    1,                        /* priority of the task */
-                    &Task1,                   /* Task handle to keep track of created task */
-                    CORE_1);                  /* pin task to core 0 */                  
+      BLYNK_HandlerTask,        /* Task function. */
+      "BLYNK",                  /* name of task. */
+      10000,                    /* Stack size of task */
+      NULL,                     /* parameter of the task */
+      1,                        /* priority of the task */
+      &Task2,                   /* Task handle to keep track of created task */
+      CORE_0);                  /* pin task to core 0 */     
   delay(500); 
+
+  xTaskCreatePinnedToCore(
+      ESPNOW_HandlerTask,       /* Task function. */
+      "ESPNOW",                 /* name of task. */
+      10000,                    /* Stack size of task */
+      NULL,                     /* parameter of the task */
+      1,                        /* priority of the task */
+      &Task1,                   /* Task handle to keep track of created task */
+      CORE_1);                  /* pin task to core 1 */                  
+  delay(500); 
+
+
+    
+
 }
 
 void loop() {
-  Blynk.run();
-  timer.run();
+  // Blynk.run();
+  // timer.run();
 }
 
