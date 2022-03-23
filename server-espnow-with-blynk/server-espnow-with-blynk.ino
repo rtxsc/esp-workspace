@@ -328,9 +328,9 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     jsonString1 = JSON.stringify(board);
     // events.send(jsonString.c_str(), "new_readings", millis());
     Serial.printf("Board ID %u: %u bytes\n", incomingReadings.id, len);
-    Serial.printf("temp value: %4.2f \n", temp);
-    Serial.printf("humi value: %4.2f \n", humi);
-    Serial.printf("readingID value: %d \n", read_id);
+    Serial.printf("temp value: %4.2f \n", temp1);
+    Serial.printf("humi value: %4.2f \n", humi1);
+    Serial.printf("readingID value: %d \n", read_id1);
     Serial.println();
   }
   else if(incomingReadings.id == 2){
