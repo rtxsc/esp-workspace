@@ -226,6 +226,7 @@ void printTimeNTP(){
 
 BLYNK_CONNECTED() {
   Blynk.syncVirtual(V0, V1, V2, V3);
+  Blynk.virtualWrite(V12,WiFi.localIP().toString());
 }
 
 BLYNK_WRITE(V0)
@@ -483,7 +484,6 @@ void setup() {
     _clock.setTime();
   #endif
 
-  Blynk.virtualWrite(V12,WiFi.localIP().toString());
   Serial.println(WiFi.macAddress()); 
 
   lcd.clear();
@@ -499,7 +499,8 @@ void setup() {
   Serial.print("ESP Board MAC Address:  ");
   Serial.println(WiFi.macAddress());
 
-
+// /Users/zidz/Documents/Arduino/libraries/Blynk/src/Adapters/BlynkArduinoClient.h
+// to configure the begin timeout, edit the file at path above
   Blynk.begin(auth, ssid, pass);
   Serial.print("[BLYNK WiFi Handler] WiFi connected with IP ");  
   Serial.println(WiFi.localIP());
