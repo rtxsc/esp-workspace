@@ -6,7 +6,6 @@
 #define BOARD_ID    0x01  // DO NOT FORGET TO CHANGE THIS ID either 0x01 (client1) or 0x02 (client2)
 #define LED         0x02
 
-//#define DHTTYPE    DHT11     // DHT 11
 //MAC Address of the receiver AC:67:B2:25:85:78 (this is the AFS server - THE ONLY ONE SERVER)
 uint8_t serverAddress[] = {0xAC, 0x67, 0xB2, 0x25, 0x85, 0x78};
 
