@@ -103,12 +103,14 @@ unsigned int interval = 60000;      // very long delay just to free up more CPU 
 bool esp_now_initialized = false;
 
 // MAC Address of the receiver #1 => 9c:9c:1f:c5:94:24 (ESP01-client-1)
-uint8_t broadcastAddress_1[] = {0x9C, 0x9C, 0x1F, 0xC5, 0x94, 0x24};
-char* broadcastAddress1_str = "9c:9c:1f:c5:94:24";
+uint8_t client1_mac[] = {0x9C, 0x9C, 0x1F, 0xC5, 0x94, 0x24};
+String client1_mac_string = "9c:9c:1f:c5:94:24";
+const char* client1_cchar = client1_mac_string.c_str();
 
 // MAC Address of the receiver #2 => 9c:9c:1f:e3:85:3c (ESP01-client-2)
-uint8_t broadcastAddress_2[] = {0x9C, 0x9C, 0x1F, 0xE3, 0x85, 0x3C};
-char* broadcastAddress2_str = "9c:9c:1f:e3:85:3c";
+uint8_t client2_mac[] = {0x9C, 0x9C, 0x1F, 0xE3, 0x85, 0x3C};
+String client2_mac_string = "9c:9c:1f:e3:85:3c";
+const char* client2_cchar = client2_mac_string.c_str();
 
 // Structure example to receive data
 // Must match the sender structure
@@ -250,7 +252,7 @@ BLYNK_WRITE(V2)
   if(esp_now_initialized){
     sendControl.control = pinValue;
     //Send message via ESP-NOW
-    esp_err_t result = esp_now_send(broadcastAddress_2, (uint8_t *) &sendControl, sizeof(sendControl));
+    esp_err_t result = esp_now_send(client2_mac, (uint8_t *) &sendControl, sizeof(sendControl));
     if (result == ESP_OK) {
       Serial.println("Sent with success from BLYNK_WRITE(V2)");
     }
@@ -268,7 +270,7 @@ BLYNK_WRITE(V3)
   if(esp_now_initialized){
     sendControl.control = pinValue;
     //Send message via ESP-NOW
-    esp_err_t result = esp_now_send(broadcastAddress_1, (uint8_t *) &sendControl, sizeof(sendControl));
+    esp_err_t result = esp_now_send(client1_mac, (uint8_t *) &sendControl, sizeof(sendControl));
     if (result == ESP_OK) {
       Serial.println("Sent with success from BLYNK_WRITE(V3)");
     }
@@ -292,8 +294,8 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
   snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
            mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
   // Serial.println(macStr);
-  if(strcmp(macStr, broadcastAddress1_str) == 0) Serial.println("Client ID 1");
-  else if(strcmp(macStr, broadcastAddress2_str) == 0) Serial.println("Client ID 2");
+  if(strcmp(macStr, client1_cchar) == 0) Serial.println("Client ID 1");
+  else if(strcmp(macStr, client2_cchar) == 0) Serial.println("Client ID 2");
   else Serial.print(".");
 
   memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
@@ -347,7 +349,7 @@ void ESPNOW_HandlerTask(void * pvParameters)
   // Register peer (peer here is going to be client-1) CLIENT ID 1
   esp_now_peer_info_t peerInfo;
   memset(&peerInfo, 0, sizeof(peerInfo)); // https://github.com/espressif/arduino-esp32/issues/6029
-  memcpy(peerInfo.peer_addr, broadcastAddress_1, 6);
+  memcpy(peerInfo.peer_addr, client1_mac, 6);
   peerInfo.encrypt = false;
   
   // Add peer CLIENT ID 1      
@@ -359,7 +361,7 @@ void ESPNOW_HandlerTask(void * pvParameters)
   // Register peer (peer here is going to be client-2) CLIENT ID 2
   esp_now_peer_info_t peerInfo2;
   memset(&peerInfo2, 0, sizeof(peerInfo2)); // https://github.com/espressif/arduino-esp32/issues/6029
-  memcpy(peerInfo2.peer_addr, broadcastAddress_2, 6);
+  memcpy(peerInfo2.peer_addr, client2_mac, 6);
   peerInfo2.encrypt = false;
   
   // Add peer CLIENT ID 2       
