@@ -1,26 +1,14 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <WiFi.h>
-#include <Adafruit_Sensor.h>
-#include <DHT.h>
-
-#define BOARD_ID    0x02  // DO NOT FORGET TO CHANGE THIS ID
-#define LED         0x02
 
 // Set your Board ID (ESP32 Sender #1 = BOARD_ID 1, ESP32 Sender #2 = BOARD_ID 2, etc)
+#define BOARD_ID    0x01  // DO NOT FORGET TO CHANGE THIS ID either 0x01 (client1) or 0x02 (client2)
+#define LED         0x02
 
-// Digital pin connected to the DHT sensor
-#define DHTPIN 4  
-
-// Uncomment the type of sensor in use:
 //#define DHTTYPE    DHT11     // DHT 11
-#define DHTTYPE    DHT22     // DHT 22 (AM2302)
-//#define DHTTYPE    DHT21     // DHT 21 (AM2301)
-
-DHT dht(DHTPIN, DHTTYPE);
-
-//MAC Address of the receiver AC:67:B2:25:85:78 (this is the AFS server)
-uint8_t broadcastAddress[] = {0xAC, 0x67, 0xB2, 0x25, 0x85, 0x78};
+//MAC Address of the receiver AC:67:B2:25:85:78 (this is the AFS server - THE ONLY ONE SERVER)
+uint8_t serverAddress[] = {0xAC, 0x67, 0xB2, 0x25, 0x85, 0x78};
 
 //Structure example to send data
 //Must match the receiver structure
@@ -35,8 +23,7 @@ typedef struct struct_message {
 //Create a struct_message called myData
 struct_message myData;
 
-
-// Structure example to receive data (control)
+// Structure example to receive data (control) signal sent by the server via Blynk
 // Must match the sender structure (sender is AFS server)
 typedef struct struct_control {
     int control;
@@ -46,11 +33,11 @@ typedef struct struct_control {
 struct_control recvControl;
 
 unsigned long previousMillis = 0;   // Stores last time temperature was published
-const long interval = 10000;        // Interval at which to publish sensor readings
+const int interval = 5000;        // Interval at which to publish sensor readings 5 seconds for stability
 
 unsigned int payload_id = 0;
 
-// Insert your SSID
+// Insert your SSID following the SSID connected by the server ! TAKE NOTE
 constexpr char WIFI_SSID[] = "NPRDC CELCOM M2";
 
 int32_t getWiFiChannel(const char *ssid) {
@@ -64,35 +51,6 @@ int32_t getWiFiChannel(const char *ssid) {
   return 0;
 }
 
-float readDHTTemperature() {
-  // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
-  // Read temperature as Celsius (the default)
-  float t = random(22,38);
-  // Read temperature as Fahrenheit (isFahrenheit = true)
-  //float t = dht.readTemperature(true);
-  // Check if any reads failed and exit early (to try again).
-  if (isnan(t)) {    
-    Serial.println("Failed to read from DHT sensor!");
-    return 0;
-  }
-  else {
-    Serial.println(t);
-    return t;
-  }
-}
-
-float readDHTHumidity() {
-  // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
-  float h = random(50,80);
-  if (isnan(h)) {
-    Serial.println("Failed to read from DHT sensor!");
-    return 0;
-  }
-  else {
-    Serial.println(h);
-    return h;
-  }
-}
 
 // callback when data is sent
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
@@ -104,10 +62,7 @@ void setup() {
   //Init Serial Monitor
   Serial.begin(115200);
   pinMode(LED,OUTPUT);
-  digitalWrite(LED, HIGH);
 
-  dht.begin();
- 
   // Set device as a Wi-Fi Station and set channel
   WiFi.mode(WIFI_STA);
 
@@ -132,10 +87,10 @@ void setup() {
   // get the status of Trasnmitted packet
   esp_now_register_send_cb(OnDataSent);
   
-  //Register peer
+  // Register peer (to register with server as the only ONE peer)
   esp_now_peer_info_t peerInfo;
   memset(&peerInfo, 0, sizeof(peerInfo)); // https://github.com/espressif/arduino-esp32/issues/6029
-  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  memcpy(peerInfo.peer_addr, serverAddress, 6);
   peerInfo.encrypt = false;
   
   //Add peer        
@@ -143,8 +98,7 @@ void setup() {
     Serial.println("Failed to add peer");
     return;
   }
-  digitalWrite(LED, LOW);
-
+  digitalWrite(LED, LOW); // reset the LED to OFF initially (not using the state of pin at the moment 25.03.2022)
 }
 
 // callback function that will be executed when data is received
@@ -172,13 +126,13 @@ void loop() {
     previousMillis = currentMillis;
     //Set values to send
     myData.id = BOARD_ID;
-    myData.temp = readDHTTemperature();
-    myData.humi = readDHTHumidity();
+    myData.temp = random(20,50);
+    myData.humi = random(50,100);
     myData.randomNum = random(0,14);
     myData.payload_id = payload_id++;
      
     //Send message via ESP-NOW
-    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
+    esp_err_t result = esp_now_send(serverAddress, (uint8_t *) &myData, sizeof(myData));
     if (result == ESP_OK) {
       Serial.println("Sent with success");
     }

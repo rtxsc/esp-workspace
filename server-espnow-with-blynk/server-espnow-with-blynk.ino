@@ -22,10 +22,6 @@
 TaskHandle_t Task1; // ESPNOW
 TaskHandle_t Task2; // BLYNK
 
-// AsyncWebServer server(80);
-// AsyncEventSource events("/events");
-
-
  byte degree_symbol[8] = {
     0b00110,
     0b01001,
@@ -104,6 +100,7 @@ int read_id2 = 0;
 
 unsigned long previousMillis = 0;   // Stores last time temperature was published
 unsigned int interval = 60000;      // very long delay just to free up more CPU time
+bool esp_now_initialized = false;
 
 // MAC Address of the receiver #1 => 9c:9c:1f:c5:94:24 (ESP01-client-1)
 uint8_t broadcastAddress_1[] = {0x9C, 0x9C, 0x1F, 0xC5, 0x94, 0x24};
@@ -145,79 +142,6 @@ NTPClient   timeClient(ntpUDP, "pool.ntp.org", 3600, 60000);
 String formattedDate;
 String dayStamp;
 String timeStamp;
-
-
-const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML><html>
-<head>
-  <title>ESP-NOW DASHBOARD</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
-  <link rel="icon" href="data:,">
-  <style>
-    html {font-family: Arial; display: inline-block; text-align: center;}
-    p {  font-size: 1.2rem;}
-    body {  margin: 0;}
-    .topnav { overflow: hidden; background-color: #2f4468; color: white; font-size: 1.7rem; }
-    .content { padding: 20px; }
-    .card { background-color: white; box-shadow: 2px 2px 12px 1px rgba(140,140,140,.5); }
-    .cards { max-width: 700px; margin: 0 auto; display: grid; grid-gap: 2rem; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
-    .reading { font-size: 2.8rem; }
-    .packet { color: #bebebe; }
-    .card.temperature { color: #fd7e14; }
-    .card.humidity { color: #1b78e2; }
-  </style>
-</head>
-<body>
-  <div class="topnav">
-    <h3>ESP-NOW DASHBOARD</h3>
-  </div>
-  <div class="content">
-    <div class="cards">
-      <div class="card temperature">
-        <h4><i class="fas fa-thermometer-half"></i> BOARD #1 - TEMPERATURE</h4><p><span class="reading"><span id="t1"></span> &deg;C</span></p><p class="packet">Reading ID: <span id="rt1"></span></p>
-      </div>
-      <div class="card humidity">
-        <h4><i class="fas fa-tint"></i> BOARD #1 - HUMIDITY</h4><p><span class="reading"><span id="h1"></span> &percnt;</span></p><p class="packet">Reading ID: <span id="rh1"></span></p>
-      </div>
-      <div class="card temperature">
-        <h4><i class="fas fa-thermometer-half"></i> BOARD #2 - TEMPERATURE</h4><p><span class="reading"><span id="t2"></span> &deg;C</span></p><p class="packet">Reading ID: <span id="rt2"></span></p>
-      </div>
-      <div class="card humidity">
-        <h4><i class="fas fa-tint"></i> BOARD #2 - HUMIDITY</h4><p><span class="reading"><span id="h2"></span> &percnt;</span></p><p class="packet">Reading ID: <span id="rh2"></span></p>
-      </div>
-    </div>
-  </div>
-<script>
-if (!!window.EventSource) {
- var source = new EventSource('/events');
- 
- source.addEventListener('open', function(e) {
-  console.log("Events Connected");
- }, false);
- source.addEventListener('error', function(e) {
-  if (e.target.readyState != EventSource.OPEN) {
-    console.log("Events Disconnected");
-  }
- }, false);
- 
- source.addEventListener('message', function(e) {
-  console.log("message", e.data);
- }, false);
- 
- source.addEventListener('new_readings', function(e) {
-  console.log("new_readings", e.data);
-  var obj = JSON.parse(e.data);
-  document.getElementById("t"+obj.id).innerHTML = obj.temperature.toFixed(2);
-  document.getElementById("h"+obj.id).innerHTML = obj.humidity.toFixed(2);
-  document.getElementById("rt"+obj.id).innerHTML = obj.readingId;
-  document.getElementById("rh"+obj.id).innerHTML = obj.readingId;
- }, false);
-}
-</script>
-</body>
-</html>)rawliteral";
-
 
 void display_uptime_top_row(){
     uptime_formatter::getUptime();
@@ -321,14 +245,17 @@ BLYNK_WRITE(V2)
   int pinValue = param.asInt(); // assigning incoming value from pin V1 to a variable
   digitalWrite(relay_in3,pinValue);
   Blynk.virtualWrite(state2_vpin, digitalRead(relay_in3));
-  sendControl.control = pinValue;
-  //Send message via ESP-NOW
-  esp_err_t result = esp_now_send(broadcastAddress_2, (uint8_t *) &sendControl, sizeof(sendControl));
-  if (result == ESP_OK) {
-    Serial.println("Sent with success");
-  }
-  else {
-    Serial.println("Error sending the data");
+
+  if(esp_now_initialized){
+    sendControl.control = pinValue;
+    //Send message via ESP-NOW
+    esp_err_t result = esp_now_send(broadcastAddress_2, (uint8_t *) &sendControl, sizeof(sendControl));
+    if (result == ESP_OK) {
+      Serial.println("Sent with success from BLYNK_WRITE(V2)");
+    }
+    else {
+      Serial.println("Error sending the data");
+    }
   }
 }
 BLYNK_WRITE(V3)
@@ -336,14 +263,17 @@ BLYNK_WRITE(V3)
   int pinValue = param.asInt(); // assigning incoming value from pin V1 to a variable
   digitalWrite(relay_in4,pinValue);
   Blynk.virtualWrite(state3_vpin, digitalRead(relay_in4));
-  sendControl.control = pinValue;
-  //Send message via ESP-NOW
-  esp_err_t result = esp_now_send(broadcastAddress_1, (uint8_t *) &sendControl, sizeof(sendControl));
-  if (result == ESP_OK) {
-    Serial.println("Sent with success");
-  }
-  else {
-    Serial.println("Error sending the data");
+  
+  if(esp_now_initialized){
+    sendControl.control = pinValue;
+    //Send message via ESP-NOW
+    esp_err_t result = esp_now_send(broadcastAddress_1, (uint8_t *) &sendControl, sizeof(sendControl));
+    if (result == ESP_OK) {
+      Serial.println("Sent with success from BLYNK_WRITE(V3)");
+    }
+    else {
+      Serial.println("Error sending the data");
+    }
   }
 }
 
@@ -381,12 +311,6 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     read_id1 = incomingReadings.readingId;
     dt1 = get_timestamp();
     jsonString1 = JSON.stringify(board);
-    // events.send(jsonString.c_str(), "new_readings", millis());
-    // Serial.printf("Board ID %u: %u bytes\n", incomingReadings.id, len);
-    // Serial.printf("temp value: %4.2f \n", temp1);
-    // Serial.printf("humi1 value: %4.2f \n", humi1);
-    // Serial.printf("readingID1 value: %d \n", read_id1);
-    // Serial.println();
   }
   else if(incomingReadings.id == 2){
     temp2 = incomingReadings.temp;
@@ -395,20 +319,13 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     read_id2 = incomingReadings.readingId;
     dt2 = get_timestamp();
     jsonString2 = JSON.stringify(board);
-    // events.send(jsonString2.c_str(), "new_readings", millis());
-    // Serial.printf("2-Board ID %u: %u bytes\n", incomingReadings.id, len);
-    // Serial.printf("2-temp2 value: %4.2f \n", temp2);
-    // Serial.printf("2-humi2 value: %4.2f \n", humi2);
-    // Serial.printf("2-readingID2 value: %d \n", read_id2);
-    // Serial.println();
   }
   else{
     Serial.println("No payload received");
   }
-  
 }
 
-void ESPNOW_HandlerTask(void * pvParameters) // previously void loop()
+void ESPNOW_HandlerTask(void * pvParameters) 
 {
   Serial.print("ESPNOW_HandlerTask running on core ");
   Serial.println(xPortGetCoreID());
@@ -417,8 +334,10 @@ void ESPNOW_HandlerTask(void * pvParameters) // previously void loop()
     Serial.println("Error initializing ESP-NOW");
     return;
   }
-  // Once ESPNow is successfully Init, we will register for recv CB to
-  // get recv packer info
+  esp_now_initialized = true; // this will allow the BlynkWrite to send out signal via espnow protocol
+  
+  // Once ESPNow is successfully Init, we will register for recv callback to
+  // get recv packer info (this can be used on server and client simultaneously 25.03.2022)
   esp_now_register_recv_cb(OnDataRecv);
 
   // coming from client-side code start ----------------------------------------------------------
@@ -430,7 +349,7 @@ void ESPNOW_HandlerTask(void * pvParameters) // previously void loop()
   memcpy(peerInfo.peer_addr, broadcastAddress_1, 6);
   peerInfo.encrypt = false;
   
-  //Add peer        
+  // Add peer CLIENT ID 1      
   if (esp_now_add_peer(&peerInfo) != ESP_OK){
     Serial.println("Failed to add peer client ID 1");
     return;
@@ -442,19 +361,18 @@ void ESPNOW_HandlerTask(void * pvParameters) // previously void loop()
   memcpy(peerInfo2.peer_addr, broadcastAddress_2, 6);
   peerInfo2.encrypt = false;
   
-  //Add peer        
+  // Add peer CLIENT ID 2       
   if (esp_now_add_peer(&peerInfo2) != ESP_OK){
     Serial.println("Failed to add peer client ID 2");
     return;
   }
   // coming from client-side code end ----------------------------------------------------------
 
-  for(;;){
-    // leave this empty to reserve more CPU resources for other intensive tasks    
-  } // empty forever loop task 25.03.2022 / added with esp_now_send 20:53PM 25.03.2022
+  // leave this empty to reserve more CPU resources for other intensive tasks    
+  for(;;){} // empty forever loop (no need to do anything inside here otherwise it will cost some CPU time)
 } // end of FreeRTOS handler
 
-void BLYNK_HandlerTask(void * pvParameters) // previously void loop()
+void BLYNK_HandlerTask(void * pvParameters) 
 {
   #ifdef USE_RTC
     timer.setInterval(1000L, printTimeRTC);
