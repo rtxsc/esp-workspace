@@ -22,8 +22,8 @@
 TaskHandle_t Task1; // ESPNOW
 TaskHandle_t Task2; // BLYNK
 
-AsyncWebServer server(80);
-AsyncEventSource events("/events");
+// AsyncWebServer server(80);
+// AsyncEventSource events("/events");
 
 
  byte degree_symbol[8] = {
@@ -92,24 +92,47 @@ String jsonString1 = "None";
 String dt1 = "None";
 float temp1 = 0;
 float humi1 = 0;
+int random1 = 0;
 int read_id1 = 0;
 
 String jsonString2 = "None";
 String dt2 = "None";
 float temp2 = 0;
 float humi2 = 0;
+int random2 = 0;
 int read_id2 = 0;
+
+unsigned long previousMillis = 0;   // Stores last time temperature was published
+unsigned int interval = 60000;      // very long delay just to free up more CPU time
+
+// MAC Address of the receiver #1 => 9c:9c:1f:c5:94:24 (ESP01-client-1)
+uint8_t broadcastAddress_1[] = {0x9C, 0x9C, 0x1F, 0xC5, 0x94, 0x24};
+char* broadcastAddress1_str = "9c:9c:1f:c5:94:24";
+
+// MAC Address of the receiver #2 => 9c:9c:1f:e3:85:3c (ESP01-client-2)
+uint8_t broadcastAddress_2[] = {0x9C, 0x9C, 0x1F, 0xE3, 0x85, 0x3C};
+char* broadcastAddress2_str = "9c:9c:1f:e3:85:3c";
 
 // Structure example to receive data
 // Must match the sender structure
 typedef struct struct_message {
   int id;
   float temp;
-  float hum;
+  float humi;
+  int randomNum;
   unsigned int readingId;
 } struct_message;
 
 struct_message incomingReadings;
+
+//Structure example to send data
+//Must match the receiver structure (client-1 and client-2)
+typedef struct struct_control {
+    int control;
+} struct_control;
+
+//Create a struct_message called sendControl
+struct_control sendControl;
 
 JSONVar     board;
 BlynkTimer  timer;
@@ -265,11 +288,15 @@ void printTimeNTP(){
   Blynk.virtualWrite(V20,temp1);
   Blynk.virtualWrite(V21,humi1);
   Blynk.virtualWrite(V22,read_id1);
+  Blynk.virtualWrite(V23,random1);
+
 
   Blynk.virtualWrite(V14,jsonString2 + " | Received at: " + dt2);
   Blynk.virtualWrite(V24,temp2);
   Blynk.virtualWrite(V25,humi2);
   Blynk.virtualWrite(V26,read_id2);
+  Blynk.virtualWrite(V27,random2);
+
 
 }
 
@@ -294,12 +321,36 @@ BLYNK_WRITE(V2)
   int pinValue = param.asInt(); // assigning incoming value from pin V1 to a variable
   digitalWrite(relay_in3,pinValue);
   Blynk.virtualWrite(state2_vpin, digitalRead(relay_in3));
+  sendControl.control = pinValue;
+  //Send message via ESP-NOW
+  esp_err_t result = esp_now_send(broadcastAddress_2, (uint8_t *) &sendControl, sizeof(sendControl));
+  if (result == ESP_OK) {
+    Serial.println("Sent with success");
+  }
+  else {
+    Serial.println("Error sending the data");
+  }
 }
 BLYNK_WRITE(V3)
 {
   int pinValue = param.asInt(); // assigning incoming value from pin V1 to a variable
   digitalWrite(relay_in4,pinValue);
   Blynk.virtualWrite(state3_vpin, digitalRead(relay_in4));
+  sendControl.control = pinValue;
+  //Send message via ESP-NOW
+  esp_err_t result = esp_now_send(broadcastAddress_1, (uint8_t *) &sendControl, sizeof(sendControl));
+  if (result == ESP_OK) {
+    Serial.println("Sent with success");
+  }
+  else {
+    Serial.println("Error sending the data");
+  }
+}
+
+// callback when data is sent
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.print("\r\nLast Packet Send Status:\t");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 }
 
 // callback function that will be executed when data is received
@@ -309,39 +360,46 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
   Serial.print("Packet received from: ");
   snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
            mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-  Serial.println(macStr);
+  // Serial.println(macStr);
+  if(strcmp(macStr, broadcastAddress1_str) == 0) Serial.println("Client ID 1");
+  else if(strcmp(macStr, broadcastAddress2_str) == 0) Serial.println("Client ID 2");
+  else Serial.print(".");
+
   memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
 
   board["id"] = incomingReadings.id;
   board["temperature"] = incomingReadings.temp;
-  board["humidity"] = incomingReadings.hum;
+  board["humidity"] = incomingReadings.humi;
+  board["random"] = incomingReadings.randomNum;
   board["readingId"] = String(incomingReadings.readingId);
 
 
   if(incomingReadings.id == 1){
     temp1 = incomingReadings.temp;
-    humi1 = incomingReadings.hum;
+    humi1 = incomingReadings.humi;
+    random1 = incomingReadings.randomNum;
     read_id1 = incomingReadings.readingId;
     dt1 = get_timestamp();
     jsonString1 = JSON.stringify(board);
     // events.send(jsonString.c_str(), "new_readings", millis());
     // Serial.printf("Board ID %u: %u bytes\n", incomingReadings.id, len);
     // Serial.printf("temp value: %4.2f \n", temp1);
-    // Serial.printf("humi value: %4.2f \n", humi1);
-    // Serial.printf("readingID value: %d \n", read_id1);
+    // Serial.printf("humi1 value: %4.2f \n", humi1);
+    // Serial.printf("readingID1 value: %d \n", read_id1);
     // Serial.println();
   }
   else if(incomingReadings.id == 2){
     temp2 = incomingReadings.temp;
-    humi2 = incomingReadings.hum;
+    humi2 = incomingReadings.humi;
+    random2 = incomingReadings.randomNum;
     read_id2 = incomingReadings.readingId;
     dt2 = get_timestamp();
     jsonString2 = JSON.stringify(board);
     // events.send(jsonString2.c_str(), "new_readings", millis());
     // Serial.printf("2-Board ID %u: %u bytes\n", incomingReadings.id, len);
-    // Serial.printf("2-temp value: %4.2f \n", temp2);
-    // Serial.printf("2-humi value: %4.2f \n", humi2);
-    // Serial.printf("2-readingID value: %d \n", read_id2);
+    // Serial.printf("2-temp2 value: %4.2f \n", temp2);
+    // Serial.printf("2-humi2 value: %4.2f \n", humi2);
+    // Serial.printf("2-readingID2 value: %d \n", read_id2);
     // Serial.println();
   }
   else{
@@ -363,29 +421,37 @@ void ESPNOW_HandlerTask(void * pvParameters) // previously void loop()
   // get recv packer info
   esp_now_register_recv_cb(OnDataRecv);
 
-  /* DISABLING LOCAL SERVER IN FAVOR OF BLYNK OPERATIONS FREEING UP MORE CPU RESOURCES 24.03.2022*/
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/html", index_html);
-  });
-   
-  events.onConnect([](AsyncEventSourceClient *client){
-    if(client->lastId()){
-      Serial.printf("Client reconnected! Last message ID that it got is: %u\n", client->lastId());
-    }
-    // send event with message "hello!", id current millis
-    // and set reconnect delay to 1 second
-    client->send("hello!", NULL, millis(), 10000);
-  });
-  server.addHandler(&events);
-  server.begin();
-  for(;;){    
-      static unsigned long lastEventTime = millis();
-      static const unsigned long EVENT_INTERVAL_MS = 5000;
-      if ((millis() - lastEventTime) > EVENT_INTERVAL_MS) {
-        events.send("ping",NULL,millis());
-        lastEventTime = millis();
-    }
+  // coming from client-side code start ----------------------------------------------------------
+  esp_now_register_send_cb(OnDataSent);
+
+  // Register peer (peer here is going to be client-1) CLIENT ID 1
+  esp_now_peer_info_t peerInfo;
+  memset(&peerInfo, 0, sizeof(peerInfo)); // https://github.com/espressif/arduino-esp32/issues/6029
+  memcpy(peerInfo.peer_addr, broadcastAddress_1, 6);
+  peerInfo.encrypt = false;
+  
+  //Add peer        
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    Serial.println("Failed to add peer client ID 1");
+    return;
   }
+
+  // Register peer (peer here is going to be client-2) CLIENT ID 2
+  esp_now_peer_info_t peerInfo2;
+  memset(&peerInfo2, 0, sizeof(peerInfo2)); // https://github.com/espressif/arduino-esp32/issues/6029
+  memcpy(peerInfo2.peer_addr, broadcastAddress_2, 6);
+  peerInfo2.encrypt = false;
+  
+  //Add peer        
+  if (esp_now_add_peer(&peerInfo2) != ESP_OK){
+    Serial.println("Failed to add peer client ID 2");
+    return;
+  }
+  // coming from client-side code end ----------------------------------------------------------
+
+  for(;;){
+    // leave this empty to reserve more CPU resources for other intensive tasks    
+  } // empty forever loop task 25.03.2022 / added with esp_now_send 20:53PM 25.03.2022
 } // end of FreeRTOS handler
 
 void BLYNK_HandlerTask(void * pvParameters) // previously void loop()
@@ -397,10 +463,10 @@ void BLYNK_HandlerTask(void * pvParameters) // previously void loop()
   #endif
   Serial.print("BLYNK_HandlerTask running on core ");
   Serial.println(xPortGetCoreID());
-    for(;;){    
-      Blynk.run();
-      timer.run();
-    }
+  for(;;){    
+    Blynk.run();
+    timer.run();
+  }
 } // end of FreeRTOS handler
 
 void setup() {
@@ -462,6 +528,7 @@ void setup() {
           else{
               lcd.setCursor(0, 0); // row 1, column 0
               lcd.print(String(ssid));
+
           }
       
         }
@@ -521,7 +588,6 @@ void setup() {
   // timer.setInterval(100, handle_server_event);
   // timer.setInterval(15000L, Get_Ping);
 
-
   xTaskCreatePinnedToCore(
       BLYNK_HandlerTask,        /* Task function. */
       "BLYNK",                  /* name of task. */
@@ -543,12 +609,9 @@ void setup() {
   delay(500); 
 
 
-    
-
 }
 
 void loop() {
-  // Blynk.run();
-  // timer.run();
+  // do not run Blynk here! ESP can't manage it well
 }
 
