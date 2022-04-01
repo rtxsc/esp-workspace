@@ -36,7 +36,9 @@ String      formattedDate;
 String      dayStamp;
 String      timeStamp;
 bool        automatic = false;
-
+bool        relayAlreadyOn = false;
+long        started ;
+long        onElapse ;
 BLYNK_CONNECTED() {
   Blynk.syncVirtual(V0, V1);
 }
@@ -131,8 +133,22 @@ void get_ping(){
 void checkDeviceState(){
   bool relayState = digitalRead(RELAY);
   bool ledState = digitalRead(LED_BUILTIN2);
-  if(!relayState) relayStateLight.on();
-  else relayStateLight.off();
+
+  if(!relayState) {
+    relayStateLight.on();
+    if(!relayAlreadyOn){
+      started = millis();
+      relayAlreadyOn = true;
+    } 
+    onElapse = (millis() - started)/1000;
+    String rt = getReadableTime(onElapse);
+    Blynk.virtualWrite(V14, rt);
+  }
+  else {
+    relayStateLight.off();
+    relayAlreadyOn = false;
+    Blynk.virtualWrite(V14, "Relay not activated");
+  }
 
  if(!ledState) ledStateLight.on();
  else ledStateLight.off();
@@ -189,6 +205,41 @@ void printTimeNTP(){
   String dateTime = "Now " + timeClient.getFormattedTime() + "\t\t" + dayStamp;
   Blynk.virtualWrite(V11, dateTime);
 
+}
+
+String getReadableTime(int motion_timeout_sec) {
+  String readableTime;
+  unsigned long seconds;
+  unsigned long minutes;
+  unsigned long hours;
+  unsigned long days;
+
+  seconds = motion_timeout_sec;
+  minutes = seconds / 60;
+  hours = minutes / 60;
+  days = hours / 24;
+  seconds %= 60;
+  minutes %= 60;
+  hours %= 24;
+
+  if (days > 0) {
+    readableTime = String(days) + " ";
+  }
+
+  if (hours > 0) {
+    readableTime += String(hours) + ":";
+  }
+
+  if (minutes < 10) {
+    readableTime += "0";
+  }
+  readableTime += String(minutes) + ":";
+
+  if (seconds < 10) {
+    readableTime += "0";
+  }
+  readableTime += String(seconds);
+  return readableTime;
 }
 
 // the setup function runs once when you press reset or power the board
