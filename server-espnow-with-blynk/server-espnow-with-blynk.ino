@@ -228,14 +228,16 @@ void blynk_tasks(){
   Blynk.virtualWrite(V26,read_id2);
   Blynk.virtualWrite(V27,random2);
 
-  Blynk.virtualWrite(V15,restartCounter);
 
 }
 
 BLYNK_CONNECTED() {
+  timeClient.setTimeOffset(28800);
+  restart_ts = get_timestamp();
   Blynk.syncVirtual(V0, V1, V2, V3);
   Blynk.virtualWrite(V12,WiFi.localIP().toString());
   Blynk.virtualWrite(V16, restart_ts); 
+  Blynk.virtualWrite(V15,restartCounter);
 }
 
 BLYNK_WRITE(V0)
@@ -519,10 +521,6 @@ void setup() {
   pinMode(relay_in3,OUTPUT);
   pinMode(relay_in4,OUTPUT);
 
-  timeClient.begin();
-  timeClient.setTimeOffset(28800);
-  restart_ts = get_timestamp();
-
   /*
 
   // Set the device as a Station and Soft Access Point simultaneously
@@ -623,6 +621,9 @@ void setup() {
   lcd.setCursor(0,1);
   lcd.print("-Using NTP Time-");
   delay(1000);
+  
+  timeClient.begin();
+  timeClient.setTimeOffset(28800);
 
   // timer.setInterval(100, handle_server_event);
   // timer.setInterval(15000L, Get_Ping);
