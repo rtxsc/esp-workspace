@@ -1,8 +1,8 @@
+#define BLYNK_PRINT Serial
 #define BLYNK_TEMPLATE_ID "TMPLUQbmY96z"
 #define BLYNK_DEVICE_NAME "ESP8266 ESP01"
 #define BLYNK_AUTH_TOKEN "ONaq90OfryTSJbcGYlHlwizh4UHM8zhJ"
 
-#define BLYNK_PRINT Serial
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
 #include "uptime_formatter.h"
