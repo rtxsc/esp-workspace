@@ -18,6 +18,7 @@
 #include "DS1307.h"
 #include "uptime_formatter.h"
 #include "uptime.h"
+#include "EEPROM.h"
 
 TaskHandle_t Task1; // ESPNOW
 TaskHandle_t Task2; // BLYNK
@@ -64,7 +65,7 @@ TaskHandle_t Task2; // BLYNK
     0b00011,
   };
 
-
+#define EEPROM_SIZE 32
 #define relay_in1   17
 #define relay_in2   25
 #define relay_in3   27
@@ -75,6 +76,12 @@ TaskHandle_t Task2; // BLYNK
 #define state3_vpin 33
 #define CORE_0      0x00
 #define CORE_1      0x01
+#define restartCounterAddress   0x0F // 15 : 1 byte
+#define ESP_RST_COUNTER_ADDR    0x10 // 16 : 1 byte
+
+byte restartCounter;      // value will be loaded from EEPROM
+byte prev_restartCounter;
+
 
 // Replace with your network credentials (STATION)
 char auth[] = BLYNK_AUTH_TOKEN;
@@ -223,6 +230,7 @@ void printTimeNTP(){
   Blynk.virtualWrite(V26,read_id2);
   Blynk.virtualWrite(V27,random2);
 
+  Blynk.virtualWrite(V15,restartCounter);
 
 }
 
@@ -277,6 +285,30 @@ BLYNK_WRITE(V3)
     else {
       Serial.println("Error sending the data");
     }
+  }
+}
+BLYNK_WRITE(V5){
+  int pinValue = param.asInt();
+  if(pinValue){
+    Serial.println("CLEARING MEMORY#");
+    lcd.setCursor(0, 0); // row 0, column 0
+    lcd.print("Clearing 32Bytes");
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print("PLEASE WAIT "); 
+
+    for (int w=0; w < EEPROM_SIZE ; w++){
+      EEPROM.write(w, 255);
+      lcd.setCursor(0, 1); // row 1, column 0
+      lcd.print("PLEASE WAIT "+String(w));
+      Serial.print("W "); Serial.print(w);   Serial.print(":");  Serial.println("255");  
+    }
+    EEPROM.commit();
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    lcd.clear();
+    lcd.setCursor(0, 0); // row 0, column 0
+    lcd.print("MEMORY CLEARED");
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print("RESTARTING NOW"); 
   }
 }
 
@@ -390,15 +422,84 @@ void BLYNK_HandlerTask(void * pvParameters)
   }
 } // end of FreeRTOS handler
 
+#define FAST_DELAY 1000
+void check_restart_count(){
+  if(restartCounter==255 ){
+    Serial.println("IT'S NEW NODE CUZ RESTART COUNT HAS BEEN RESET TO 255");
+    lcd.print("IT'S NEW NODE");
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print("Reset Rc Counter"); // Reboot 000 times
+    vTaskDelay(FAST_DELAY / portTICK_PERIOD_MS);
+    lcd.clear();
+
+    restartCounter = 0;
+    EEPROM.write(restartCounterAddress, restartCounter);
+    EEPROM.commit();
+    vTaskDelay(3.3 / portTICK_PERIOD_MS); // EEPROM needs 3.3ms to write
+
+  }
+  else{
+      Serial.println("just a normal reboot or restart");
+      lcd.print("REBOOTED NODE");
+      lcd.setCursor(0, 1); // row 1, column 0
+      lcd.print("Restarted "+String(restartCounter) + " tms");
+      vTaskDelay(FAST_DELAY / portTICK_PERIOD_MS);
+      lcd.clear();
+      
+      prev_restartCounter = restartCounter; // for the comparison later on
+      restartCounter += 1;  // increment rst count by 1 for each reboot
+      Serial.printf("the current restart count is %d\n", restartCounter);
+
+      lcd.print("IT'S USED NODE"); 
+      lcd.setCursor(0, 1); // row 1, column 0
+      lcd.print("Current RST "+String(restartCounter) + " times"); // load current rst count
+      vTaskDelay(FAST_DELAY / portTICK_PERIOD_MS);
+      lcd.clear();
+
+      EEPROM.write(restartCounterAddress, restartCounter);
+      EEPROM.commit();
+      vTaskDelay(3.3 / portTICK_PERIOD_MS); // EEPROM needs 3.3ms to write          
+  }
+}
+
+void init_eeprom(){
+
+  if (!EEPROM.begin(EEPROM_SIZE))
+  {
+    lcd.clear();
+    lcd.setCursor(0, 0); 
+    lcd.print("-CRITICAL ERROR-");
+    lcd.setCursor(0, 1); 
+    lcd.print("-EEPROM  FAILED-");
+    vTaskDelay(1000000 / portTICK_PERIOD_MS);
+    // Serial.println("failed to initialise EEPROM"); delay(1000000);
+
+  }
+
+  Serial.println(" bytes read from Flash:");
+  for (int i = 0; i < EEPROM_SIZE; i++)
+  {
+    Serial.print("R "); Serial.print(i);   Serial.print(":");
+    Serial.print(byte(EEPROM.read(i))); Serial.println();
+  }
+  Serial.println();
+}
+
+
 void setup() {
   // Initialize Serial Monitor
   Serial.begin(115200);
+
   lcd.begin(16, 2);
   lcd.createChar(1, wave_right); // create block character
   lcd.createChar(2, wave_left); // create block character
   lcd.createChar(3, right_arrow); // create block character
   lcd.createChar(4, degree_symbol); // create block character
 
+  init_eeprom();
+
+  restartCounter = EEPROM.read(restartCounterAddress);
+  check_restart_count();
 
   pinMode(relay_in1,OUTPUT);
   pinMode(relay_in2,OUTPUT);
