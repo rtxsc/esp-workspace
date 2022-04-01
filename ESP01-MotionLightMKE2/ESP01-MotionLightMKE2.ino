@@ -48,6 +48,7 @@ const char*   publish_topic_payload   = "espToRaspberry/allpayload";
 String        formattedDate;
 String        dayStamp;
 String        timeStamp;
+bool          already_pushed        = false;
 bool          automatic             = true;
 bool          motion_detected       = false;
 bool          reset_motion_timeout  = false;
@@ -126,7 +127,7 @@ void reconnect() {
     // Attempt to connect
     if (client.connect(clientId.c_str())) {
       Serial.println("MQTT broker connected");
-
+      retry_count = 0; // reset counter back to 0
       // ... and resubscribe
       client.subscribe(subscribed_topic);
       client.subscribe(subscribed_topic_1);
@@ -135,7 +136,7 @@ void reconnect() {
 
     } else {
       retry_count++;
-      Serial.print("failed, rc=");
+      Serial.print("failed, rc="); // rc=-2 if failed
       Serial.println(client.state());
       for(int i=0; i<5; i++ ){
         Serial.printf("Reconnection #%d => try again in %d seconds\n", retry_count,i);
@@ -211,6 +212,7 @@ void checkDeviceState(){
     }
 
   if(motionState){
+    already_pushed        = false;
     reset_motion_timeout  = true;
     if(!motion_detected){
       motion_started_ts     = millis();
@@ -218,13 +220,11 @@ void checkDeviceState(){
       if(automatic){
           digitalWrite(RELAY,HIGH);
         }
-         
     }
     if(reset_motion_timeout) motion_started_ts = millis();
   }
   else{
     reset_motion_timeout  = false;
-    
   }
 
   if(motion_detected){
@@ -253,6 +253,7 @@ void checkDeviceState(){
   else{
     // if no more motion but still in automatic
     if(automatic) digitalWrite(RELAY,LOW);
+    snprintf (msg_timeout, MSG_BUFFER_SIZE, up_esp01);
   }
   // concatenate individual msg into a csv array (list in Python)
   strcat(msg_all,msg_motion); 
