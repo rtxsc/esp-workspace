@@ -287,6 +287,20 @@ BLYNK_WRITE(V3)
     }
   }
 }
+
+BLYNK_WRITE(V4){
+  int pinValue = param.asInt();
+  if(pinValue){
+    lcd.clear();
+    lcd.setCursor(0, 0); // row 0, column 0
+    lcd.print("FORCE RESTART");
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print("REQUESTED"); 
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    ESP.restart();
+  }
+}
+
 BLYNK_WRITE(V5){
   int pinValue = param.asInt();
   if(pinValue){
@@ -308,7 +322,7 @@ BLYNK_WRITE(V5){
     lcd.setCursor(0, 0); // row 0, column 0
     lcd.print("MEMORY CLEARED");
     lcd.setCursor(0, 1); // row 1, column 0
-    lcd.print("RESTARTING NOW"); 
+    lcd.print("RETURNING NOW"); 
   }
 }
 
