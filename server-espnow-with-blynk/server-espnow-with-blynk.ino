@@ -438,7 +438,6 @@ void BLYNK_HandlerTask(void * pvParameters)
 #define FAST_DELAY 1000
 void check_restart_count(){
   if(restartCounter==255 ){
-    Serial.println("IT'S NEW NODE CUZ RESTART COUNT HAS BEEN RESET TO 255");
     lcd.print("IT'S NEW NODE");
     lcd.setCursor(0, 1); // row 1, column 0
     lcd.print("Reset Rc Counter"); // Reboot 000 times
@@ -453,6 +452,7 @@ void check_restart_count(){
   }
   else{
       Serial.println("just a normal reboot or restart");
+      lcd.setCursor(0, 0); 
       lcd.print("REBOOTED NODE");
       lcd.setCursor(0, 1); // row 1, column 0
       lcd.print("Restarted "+String(restartCounter) + " tms");
@@ -462,8 +462,8 @@ void check_restart_count(){
       prev_restartCounter = restartCounter; // for the comparison later on
       restartCounter += 1;  // increment rst count by 1 for each reboot
       Serial.printf("the current restart count is %d\n", restartCounter);
-
-      lcd.print("IT'S USED NODE"); 
+      lcd.setCursor(0, 0); 
+      lcd.print("--WELCOME BACK--"); 
       lcd.setCursor(0, 1); // row 1, column 0
       lcd.print("Current RST "+String(restartCounter) + " times"); // load current rst count
       vTaskDelay(FAST_DELAY / portTICK_PERIOD_MS);
@@ -518,6 +518,10 @@ void setup() {
   pinMode(relay_in2,OUTPUT);
   pinMode(relay_in3,OUTPUT);
   pinMode(relay_in4,OUTPUT);
+
+  timeClient.begin();
+  timeClient.setTimeOffset(28800);
+  restart_ts = get_timestamp();
 
   /*
 
@@ -620,10 +624,6 @@ void setup() {
   lcd.print("-Using NTP Time-");
   delay(1000);
 
-  timeClient.begin();
-  timeClient.setTimeOffset(28800);
-
-  restart_ts = get_timestamp();
   // timer.setInterval(100, handle_server_event);
   // timer.setInterval(15000L, Get_Ping);
 
