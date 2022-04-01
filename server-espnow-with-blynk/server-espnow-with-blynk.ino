@@ -1,3 +1,6 @@
+#define BLYNK_PRINT Serial // Defines the object that is used for printing
+// #define BLYNK_DEBUG        // Optional, this enables more detailed prints
+
 #define BLYNK_TEMPLATE_ID "TMPLLcUZS8pw"
 #define BLYNK_DEVICE_NAME "AFS"
 #define BLYNK_AUTH_TOKEN "3G4XbLzWHurLKwzeAeKQZH7QttvcM9gR"
@@ -81,7 +84,7 @@ TaskHandle_t Task2; // BLYNK
 
 byte restartCounter;      // value will be loaded from EEPROM
 byte prev_restartCounter;
-
+String restart_ts = "None";
 
 // Replace with your network credentials (STATION)
 char auth[] = BLYNK_AUTH_TOKEN;
@@ -204,14 +207,9 @@ String get_timestamp(){
 
 }
 
-void printTimeNTP(){
+void blynk_tasks(){
   lcd.clear();
-  timeClient.update();
-  formattedDate = timeClient.getFormattedDate();
-  // Extract date
-  int splitT = formattedDate.indexOf("T");
-  dayStamp = formattedDate.substring(0, splitT);
-  String dateTime = timeClient.getFormattedTime() + " " + dayStamp;
+  String dateTime = get_timestamp();
   display_uptime_top_row();
   lcd.setCursor(0,1);
   lcd.print(dateTime);
@@ -237,6 +235,7 @@ void printTimeNTP(){
 BLYNK_CONNECTED() {
   Blynk.syncVirtual(V0, V1, V2, V3);
   Blynk.virtualWrite(V12,WiFi.localIP().toString());
+  Blynk.virtualWrite(V16, restart_ts); 
 }
 
 BLYNK_WRITE(V0)
@@ -426,7 +425,7 @@ void BLYNK_HandlerTask(void * pvParameters)
   #ifdef USE_RTC
     timer.setInterval(1000L, printTimeRTC);
   #else
-    timer.setInterval(1000L, printTimeNTP);
+    timer.setInterval(1000L, blynk_tasks);
   #endif
   Serial.print("BLYNK_HandlerTask running on core ");
   Serial.println(xPortGetCoreID());
@@ -520,6 +519,8 @@ void setup() {
   pinMode(relay_in3,OUTPUT);
   pinMode(relay_in4,OUTPUT);
 
+  /*
+
   // Set the device as a Station and Soft Access Point simultaneously
   WiFi.mode(WIFI_AP_STA);
   Serial.print("Connecting to ");
@@ -583,6 +584,34 @@ void setup() {
         ESP.restart();
     }
   }
+
+  #ifdef USE_RTC
+    _clock.begin();
+    _clock.fillByYMD(2021,12,24);
+    _clock.fillByHMS(12,30,30);
+    _clock.fillDayOfWeek(FRI);
+    _clock.setTime();
+  #endif
+
+  Serial.print("Station IP Address: ");
+  Serial.println(WiFi.localIP());
+  Serial.print("Wi-Fi Channel: ");
+  Serial.println(WiFi.channel());
+  Serial.print("ESP Board MAC Address:  ");
+  Serial.println(WiFi.macAddress());
+  */
+
+// /Users/zidz/Documents/Arduino/libraries/Blynk/src/Adapters/BlynkArduinoClient.h
+// /Users/zidz/Documents/Arduino/libraries/Blynk/src/Blynk/BlynkProtocol.h (1 April 2022)
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Connecting Blynk");
+  lcd.setCursor(0,1);
+  lcd.print("blynk.cloud:80");
+// to configure the begin timeout, edit the file at path above
+  Blynk.begin(auth, ssid, pass);
+  Serial.print("[BLYNK WiFi Handler Main Server Code] WiFi connected with IP ");  
+  Serial.println(WiFi.localIP());
   lcd.clear();
   lcd.setCursor(0,0);
   lcd.print("!WiFi Connected!");
@@ -593,34 +622,7 @@ void setup() {
   timeClient.begin();
   timeClient.setTimeOffset(28800);
 
-  #ifdef USE_RTC
-    _clock.begin();
-    _clock.fillByYMD(2021,12,24);
-    _clock.fillByHMS(12,30,30);
-    _clock.fillDayOfWeek(FRI);
-    _clock.setTime();
-  #endif
-
-  Serial.println(WiFi.macAddress()); 
-
-  lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print("Connecting Blynk");
-  lcd.setCursor(0,1);
-  lcd.print("blynk.cloud:80");
-
-  Serial.print("Station IP Address: ");
-  Serial.println(WiFi.localIP());
-  Serial.print("Wi-Fi Channel: ");
-  Serial.println(WiFi.channel());
-  Serial.print("ESP Board MAC Address:  ");
-  Serial.println(WiFi.macAddress());
-
-// /Users/zidz/Documents/Arduino/libraries/Blynk/src/Adapters/BlynkArduinoClient.h
-// to configure the begin timeout, edit the file at path above
-  Blynk.begin(auth, ssid, pass);
-  Serial.print("[BLYNK WiFi Handler] WiFi connected with IP ");  
-  Serial.println(WiFi.localIP());
+  restart_ts = get_timestamp();
   // timer.setInterval(100, handle_server_event);
   // timer.setInterval(15000L, Get_Ping);
 
