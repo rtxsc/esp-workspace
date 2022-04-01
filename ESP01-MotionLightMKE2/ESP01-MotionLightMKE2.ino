@@ -56,7 +56,7 @@ long          motion_elapse_sec     = 0;
 long          motion_elapse         = 0;
 long          motion_timeout_sec    = 0;
 int           motion_hold           = 10;
-int           retry_count           = 2;
+int           retry_count           = 0;
 
 unsigned long lastMsg               = 0;
 unsigned long lastMsg_timeout       = 0;
@@ -136,13 +136,15 @@ void reconnect() {
     } else {
       retry_count++;
       Serial.print("failed, rc=");
-      Serial.print(client.state());
+      Serial.println(client.state());
       for(int i=0; i<5; i++ ){
-        Serial.printf("Reconnect #%d => try again in %d seconds\n", retry_count,i);
+        Serial.printf("Reconnection #%d => try again in %d seconds\n", retry_count,i);
         delay(1000);
       }
-      if(retry_count > 3){
+      if(retry_count > 3){ // try for 3 consecutive times before giving up
         Serial.println("Giving up. Router probably down");
+        delay(1000);
+        Serial.println("Restarting now...");
         delay(1000);
         ESP.restart();
       }
