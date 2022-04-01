@@ -9,6 +9,7 @@
 #define ssid_0 "NPRDC CELCOM M1"
 #define ssid_1 "NPRDC CELCOM M2"
 
+
 #include <Pinger.h>
 extern "C"
 {
@@ -55,6 +56,7 @@ long          motion_elapse_sec     = 0;
 long          motion_elapse         = 0;
 long          motion_timeout_sec    = 0;
 int           motion_hold           = 10;
+int           retry_count           = 2;
 
 unsigned long lastMsg               = 0;
 unsigned long lastMsg_timeout       = 0;
@@ -132,11 +134,18 @@ void reconnect() {
       client.subscribe(subscribed_topic_r);
 
     } else {
+      retry_count++;
       Serial.print("failed, rc=");
       Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
+      for(int i=0; i<5; i++ ){
+        Serial.printf("Reconnect #%d => try again in %d seconds\n", retry_count,i);
+        delay(1000);
+      }
+      if(retry_count > 3){
+        Serial.println("Giving up. Router probably down");
+        delay(1000);
+        ESP.restart();
+      }
     }
   }
 }
