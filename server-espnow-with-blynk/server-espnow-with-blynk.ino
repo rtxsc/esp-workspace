@@ -2,8 +2,16 @@
 // #define BLYNK_DEBUG        // Optional, this enables more detailed prints
 
 #define BLYNK_TEMPLATE_ID "TMPLLcUZS8pw"
-#define BLYNK_DEVICE_NAME "AFS"
-#define BLYNK_AUTH_TOKEN "3G4XbLzWHurLKwzeAeKQZH7QttvcM9gR"
+
+#define AFS // options: AFS/AFS2
+
+#ifdef AFS
+  #define BLYNK_DEVICE_NAME "AFS"
+  #define BLYNK_AUTH_TOKEN "3G4XbLzWHurLKwzeAeKQZH7QttvcM9gR"
+#else
+  #define BLYNK_DEVICE_NAME "AFS2"
+  #define BLYNK_AUTH_TOKEN "get the new auth"
+#endif
 //#define USE_RTC
 
 #include <esp_now.h>
