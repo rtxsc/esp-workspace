@@ -255,9 +255,6 @@ void blynk_tasks(){
   Blynk.virtualWrite(V40,busvoltage);
   Blynk.virtualWrite(V41,shuntvoltage);
   Blynk.virtualWrite(V42,current_mA);
-
-
-
 }
 
 BLYNK_CONNECTED() {
@@ -323,9 +320,9 @@ BLYNK_WRITE(V4){
   if(pinValue){
     lcd.clear();
     lcd.setCursor(0, 0); // row 0, column 0
-    lcd.print("FORCE RESTART");
+    lcd.print("-FORCE RESTART->");
     lcd.setCursor(0, 1); // row 1, column 0
-    lcd.print("REQUESTED"); 
+    lcd.print("---REQUESTED!---"); 
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     ESP.restart();
   }
