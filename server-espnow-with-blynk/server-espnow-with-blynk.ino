@@ -3,14 +3,14 @@
 
 #define BLYNK_TEMPLATE_ID "TMPLLcUZS8pw"
 
-#define AFS // options: AFS/AFS2
+#define AFS2 // options: AFS/AFS2
 
 #ifdef AFS
   #define BLYNK_DEVICE_NAME "AFS"
   #define BLYNK_AUTH_TOKEN "3G4XbLzWHurLKwzeAeKQZH7QttvcM9gR"
 #else
   #define BLYNK_DEVICE_NAME "AFS2"
-  #define BLYNK_AUTH_TOKEN "get the new auth"
+  #define BLYNK_AUTH_TOKEN "WMPQFiXeWmh7xHHUsngi8oyIHO4bG47D"
 #endif
 //#define USE_RTC
 
@@ -30,10 +30,10 @@
 #include "uptime_formatter.h"
 #include "uptime.h"
 #include "EEPROM.h"
+#include <Adafruit_INA219.h>
 
 TaskHandle_t Task1; // ESPNOW
 TaskHandle_t Task2; // BLYNK
-
  byte degree_symbol[8] = {
     0b00110,
     0b01001,
@@ -96,7 +96,7 @@ String restart_ts = "None";
 
 // Replace with your network credentials (STATION)
 char auth[] = BLYNK_AUTH_TOKEN;
-const char* ssid = "NPRDC CELCOM M2";
+const char* ssid = "NPRDC CELCOM M3";
 const char* pass = "nprdc1234";
 const char* remote_host = "blynk.cloud";
 
@@ -115,6 +115,10 @@ float temp2 = 0;
 float humi2 = 0;
 int random2 = 0;
 int read_id2 = 0;
+
+float shuntvoltage;
+float busvoltage;
+float current_mA; 
 
 unsigned long previousMillis = 0;   // Stores last time temperature was published
 unsigned int interval = 60000;      // very long delay just to free up more CPU time
@@ -157,6 +161,7 @@ DS1307      _clock;
 rgb_lcd     lcd;
 WiFiUDP     ntpUDP;
 NTPClient   timeClient(ntpUDP, "pool.ntp.org", 3600, 60000);
+Adafruit_INA219     ina219_A;
 
 // Variables to save date and time
 String formattedDate;
@@ -198,12 +203,6 @@ void display_uptime_top_row(){
     lcd.print("s");
   }
 
-
-void myTimerEvent()
-{
-  Blynk.virtualWrite(V10, millis() / 1000);
-}
-
 String get_timestamp(){
   timeClient.update();
   formattedDate = timeClient.getFormattedDate();
@@ -212,7 +211,25 @@ String get_timestamp(){
   dayStamp = formattedDate.substring(0, splitT);
   String dateTime = timeClient.getFormattedTime() + " " + dayStamp;
   return dateTime;
+}
 
+void initINA219(){
+  if (! ina219_A.begin()) {
+    Serial.println("Failed to find INA219_A chip");
+    lcd.setCursor(0, 0); // row 1, column 0
+    lcd.print("INA219_A FAILED!");
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print("CHECK I2C WIRE");
+    while (1) { delay(10); }
+  }
+  // ina219_A.setCalibration_32V_2A();
+  ina219_A.setCalibration_16V_1_6A(); // added 26.3.2021 by clumzyZidz
+}
+
+void getINA219(){
+  shuntvoltage = ina219_A.getShuntVoltage_mV(); // measured across Vin+ & Vin-
+  busvoltage = ina219_A.getBusVoltage_V(); // measured at Vin+ only
+  current_mA = ina219_A.getCurrent_mA();
 }
 
 void blynk_tasks(){
@@ -229,12 +246,16 @@ void blynk_tasks(){
   Blynk.virtualWrite(V22,read_id1);
   Blynk.virtualWrite(V23,random1);
 
-
   Blynk.virtualWrite(V14,jsonString2 + " | Received at: " + dt2);
   Blynk.virtualWrite(V24,temp2);
   Blynk.virtualWrite(V25,humi2);
   Blynk.virtualWrite(V26,read_id2);
   Blynk.virtualWrite(V27,random2);
+  
+  Blynk.virtualWrite(V40,busvoltage);
+  Blynk.virtualWrite(V41,shuntvoltage);
+  Blynk.virtualWrite(V42,current_mA);
+
 
 
 }
@@ -436,6 +457,8 @@ void BLYNK_HandlerTask(void * pvParameters)
     timer.setInterval(1000L, printTimeRTC);
   #else
     timer.setInterval(1000L, blynk_tasks);
+    timer.setInterval(1000L, getINA219);
+
   #endif
   Serial.print("BLYNK_HandlerTask running on core ");
   Serial.println(xPortGetCoreID());
@@ -632,6 +655,7 @@ void setup() {
   
   timeClient.begin();
   timeClient.setTimeOffset(28800);
+  initINA219();
 
   // timer.setInterval(100, handle_server_event);
   // timer.setInterval(15000L, Get_Ping);
