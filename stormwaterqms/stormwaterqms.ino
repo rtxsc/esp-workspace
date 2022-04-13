@@ -185,6 +185,8 @@ void getINA219(){
 }
 
 #define REFERENCE_1500mV 1500
+#define CALIBRATED_NEUTRAL_V 1500
+#define CALIBRATED_ACID_V 2032.44
 
 float getPH(){
     float voltage = readChannel(ADS1115_COMP_1_GND)*1000; // TODO: coming from ADS1115   
@@ -192,11 +194,11 @@ float getPH(){
     // phValue = ph.readPH(voltage,fluidTemp);  // convert voltage to pH with temperature compensation
     float slope = (7.0-4.0)/((CALIBRATED_NEUTRAL_V - REFERENCE_1500mV)/3.0 - (CALIBRATED_ACID_V - REFERENCE_1500mV)/3.0);  // two point: (_neutralVoltage,7.0),(_acidVoltage,4.0)
     float intercept =  7.0 - slope*(CALIBRATED_NEUTRAL_V - REFERENCE_1500mV)/3.0;
-    phValue = slope*(voltage-REFERENCE_1500mV)/3.0+intercept;
+    float phValue = slope*(voltage-REFERENCE_1500mV)/3.0+intercept;
     return phValue;
   }
 
-float getTSS_NTU(){
+void getTSS_NTU(){
  
   float tssV = readChannel(ADS1115_COMP_0_GND); // TODO: coming from ADS1115   
   // tssV = tssV/1000; // change from mV to Volt
@@ -206,7 +208,7 @@ float getTSS_NTU(){
   if(tss_ntu < 0.0) tss_ntu = 0.0;
   if(tss_ntu > 3000.0) tss_ntu = 3000.0; // max NTU readout by Dfrobot
 
-  tss_mgl = tss_ntu / 3 ; // 1 mgL = 3 NTU
+  float tss_mgl = tss_ntu / 3 ; // 1 mgL = 3 NTU
 
   if(tss_mgl<25)                        classTSS = " [ CLASS I ] ";
   else if(tss_mgl>=25 && tss_mgl<50)    classTSS = " [ CLASS IIA/B ] ";
@@ -218,7 +220,10 @@ float getTSS_NTU(){
   Serial.print("\ttss_NTU:");   Serial.print(tss_ntu);
   Serial.print("\ttss_mg/L:");  Serial.print(tss_mgl);
   Serial.print("\tClass:");     Serial.println(classTSS);
-  return average_tss;
+  Blynk.virtualWrite(V20, tss_ntu);
+  Blynk.virtualWrite(V21, tss_mgl);
+  Blynk.virtualWrite(V22, classTSS);
+
   }
 
 float readChannel(ADS1115_MUX channel) {
@@ -241,7 +246,8 @@ void blynk_tasks(){
   lcd.print(dateTime);
   Blynk.virtualWrite(V10,uptime_formatter::getUptime());
   Blynk.virtualWrite(V11, dateTime);
-
+  Blynk.virtualWrite(V23, getPH());
+  
   Blynk.virtualWrite(V40,busvoltage);
   Blynk.virtualWrite(V41,shuntvoltage);
   Blynk.virtualWrite(V42,current_mA);
@@ -308,6 +314,8 @@ void BLYNK_HandlerTask(void * pvParameters)
   #else
     timer.setInterval(1000L, blynk_tasks);
     timer.setInterval(1000L, getINA219);
+    timer.setInterval(1000L, getTSS_NTU);
+
 
   #endif
   Serial.print("BLYNK_HandlerTask running on core ");
