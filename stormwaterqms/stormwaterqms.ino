@@ -198,13 +198,38 @@ float getPH(){
     return phValue;
   }
 
+float _map(float x, float in_min, float in_max, float out_min, float out_max){
+    return float((x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min);
+}
+
+float prevMax1 = 0.0;
+String class1_use_ws1 = "Water Supply I - No treatment necessary";
+String class1_use_f1  = "Fishery I - Very sensitive aquatic species";
+
+String class2_use_ws2 = "Water Supply II - Conventional treatment required";
+String class2_use_f2  = "Fishery II - Sensitive aquatic species";
+
+String class3_use_ws3 = "Water Supply III - Extensive treatment required";
+String class3_use_f3  = "Fishery III - Common aquatic species / livestock drinking";
+
+String class4_use     = "Irrigation";
+String class5_use     = "Hazardous Level! No use case!";
+
+
 void getTSS_NTU(){
  
-  float tssV = readChannel(ADS1115_COMP_0_GND); // TODO: coming from ADS1115   
-  // tssV = tssV/1000; // change from mV to Volt
-  if(tssV < 2.5) tssV = 2.50;
-  if(tssV > 4.2) tssV = 4.200246; // 4.1+/-0.3 equal to NTU<0.5 in pure water
-  float tss_ntu = -1120.4*pow(tssV,2)+5742.3*tssV-4352.9; // formula from https://wiki.dfrobot.com/Turbidity_sensor_SKU__SEN0189
+  float tssV = readChannel(ADS1115_COMP_0_GND); // TODO: coming from ADS1115
+
+  if (tssV > prevMax1) prevMax1 = tssV;
+  float mapped_v = _map(tssV, 0.0, prevMax1, 2.5, 4.2); // map to 3.3V to 5V 
+  Serial.printf("volt_ori:%f  mapped_v:%f\n", tssV, mapped_v);
+
+  // no need to filter tssV as we are using auto-mapped value 14.04.2022
+  // if(tssV < 2.5) tssV = 2.50;
+  // if(tssV > 4.2) tssV = 4.200246; // 4.1+/-0.3 equal to NTU<0.5 in pure water
+
+
+  float tss_ntu = -1120.4*pow(mapped_v,2)+5742.3*mapped_v-4352.9; // formula from https://wiki.dfrobot.com/Turbidity_sensor_SKU__SEN0189
   if(tss_ntu < 0.0) tss_ntu = 0.0;
   if(tss_ntu > 3000.0) tss_ntu = 3000.0; // max NTU readout by Dfrobot
 
@@ -215,6 +240,35 @@ void getTSS_NTU(){
   else if(tss_mgl>=50 && tss_mgl<150)   classTSS = " [ CLASS III ] ";
   else if(tss_mgl>=150 && tss_mgl<300)  classTSS = " [ CLASS IV ] ";
   else                                  classTSS = " [ CLASS V ] ";
+
+  if(tss_mgl<25){
+    // classTSS = " [ CLASS I ] ";
+    if(millis()%2 == 0)
+      Blynk.virtualWrite(V24, class1_use_ws1);
+    else
+      Blynk.virtualWrite(V24, class1_use_f1);
+  }                        
+  else if(tss_mgl>=25 && tss_mgl<50){
+    // classTSS = " [ CLASS IIA/B ] ";
+    if(millis()%2 == 0)
+      Blynk.virtualWrite(V24, class2_use_ws2);
+    else
+      Blynk.virtualWrite(V24, class2_use_f2);
+  }else if(tss_mgl>=50 && tss_mgl<150){
+    // classTSS = " [ CLASS III ] ";
+    if(millis()%2 == 0)
+      Blynk.virtualWrite(V24, class3_use_ws3);
+    else
+      Blynk.virtualWrite(V24, class3_use_f3);
+  }   
+  else if(tss_mgl>=150 && tss_mgl<300){
+    // classTSS = " [ CLASS IV ] ";
+    Blynk.virtualWrite(V24, class4_use);
+  }  
+  else{
+    // classTSS = " [ CLASS V ] ";
+    Blynk.virtualWrite(V24, class5_use);
+  }                                  
   
   Serial.print("\ttssVolt:");   Serial.print(tssV);
   Serial.print("\ttss_NTU:");   Serial.print(tss_ntu);
