@@ -7,6 +7,7 @@
 
 //#define USE_RTC
 #include "GroveBase-ESPDuino32-Mapping.h"
+#include <ChainableLED.h>
 #include <esp_now.h>
 #include <WiFi.h>
 #include <ESP32Ping.h>
@@ -25,9 +26,39 @@
 #include "EEPROM.h"
 #include <Adafruit_INA219.h>
 #include<ADS1115_WE.h> 
+
+#include <TinyGPS++.h>
+#include <SoftwareSerial.h>
+
+
+#define GPS_AVAILABLE // might contribute to cache region access error (not sure yet 3:15AM 20.3.2021)
+
+#ifdef GPS_AVAILABLE
+  static const uint32_t GPSBaud = 9600;     // Neo6Mv2 GPS baudrate is 9600
+  #define TXPin                 GROVE_D2 
+  #define RXPin                 GROVE_D3
+  // The TinyGPS++ object
+  TinyGPSPlus gps;
+  // The serial connection to the GPS device
+  SoftwareSerial ss(RXPin, TXPin);
+  double lat;
+  double lon;
+#else
+  // kuching airport coordinate
+  float t = 0.0;
+  double lat                    = 1.4870;
+  double lon                    = 110.3416;
+  float randomLat = 0.0, randomLon = 0.0;
+
+#endif
+
+
 #define I2C_ADDRESS 0x48
 
 #define lcd_backlight GROVE_D13
+#define NUM_LEDS              1
+ChainableLED                  leds(GROVE_D6, GROVE_D7, NUM_LEDS); // (LEAVE A1 EMPTY)
+byte                          i = 0; // CHAINABLE LED ARRAY
 
 TaskHandle_t Task1; // ESPNOW
 TaskHandle_t Task2; // BLYNK
@@ -88,6 +119,17 @@ String classTSS                   = "None";
 #define CORE_1      0x01
 #define restartCounterAddress   0x0F // 15 : 1 byte
 #define ESP_RST_COUNTER_ADDR    0x10 // 16 : 1 byte
+
+#define PH_7_DFROBOT_REF_V  1500  //buffer solution 7.0 at 25C
+#define PH_7_LOWER_LIMIT    1400
+#define PH_7_UPPER_LIMIT    1600
+#define PH_7_OPTIMAL_VOLT   (PH_7_UPPER_LIMIT+PH_7_LOWER_LIMIT)/2 // Average 1500mV
+#define PH_7_AND_BEYOND     1000 // alkaline is lower than 1500mV in v2.0
+
+#define PH_4_DFROBOT_REF_V  2032  //buffer solution 4.0 at 25C
+#define PH_4_LOWER_LIMIT    1900
+#define PH_4_UPPER_LIMIT    2400
+#define PH_4_OPTIMAL_VOLT   (PH_4_UPPER_LIMIT+PH_4_LOWER_LIMIT)/2 // Average 2150mV
 
 byte restartCounter;      // value will be loaded from EEPROM
 byte prev_restartCounter;
@@ -190,12 +232,77 @@ void getINA219(){
 
 float getPH(){
     float voltage = readChannel(ADS1115_COMP_1_GND)*1000; // TODO: coming from ADS1115   
+    setRGB_from_pH_reading(voltage); 
     // voltage = voltage - offsetVph; // disable this line if supply to pH sensor is 5.0V exact
     // phValue = ph.readPH(voltage,fluidTemp);  // convert voltage to pH with temperature compensation
     float slope = (7.0-4.0)/((CALIBRATED_NEUTRAL_V - REFERENCE_1500mV)/3.0 - (CALIBRATED_ACID_V - REFERENCE_1500mV)/3.0);  // two point: (_neutralVoltage,7.0),(_acidVoltage,4.0)
     float intercept =  7.0 - slope*(CALIBRATED_NEUTRAL_V - REFERENCE_1500mV)/3.0;
     float phValue = slope*(voltage-REFERENCE_1500mV)/3.0+intercept;
     return phValue;
+  }
+
+byte red,green,blue;
+
+ void setRGB_from_pH_reading(short voltage){
+    bool acidic = false;
+    bool neutral = false;
+    bool basic = false;
+  
+    if(voltage > PH_4_LOWER_LIMIT && voltage < PH_4_UPPER_LIMIT){
+      acidic = true;
+      neutral = false;
+      basic = false;
+    }
+    else if(voltage > PH_7_LOWER_LIMIT && voltage < PH_7_UPPER_LIMIT){
+      acidic = false;
+      neutral = true;
+      basic = false;
+    }
+    #ifdef pHsensor_v1p1
+    else if(voltage > PH_7_UPPER_LIMIT && voltage < PH_7_AND_BEYOND){
+    #else
+    else if(voltage < PH_7_LOWER_LIMIT && voltage > PH_7_AND_BEYOND){
+    #endif
+      acidic = false;
+      neutral = false;
+      basic = true;
+    }
+    else{
+      acidic = false;
+      neutral = false;
+      basic = false;
+    }
+
+    if(acidic){
+      if(voltage < PH_4_LOWER_LIMIT) voltage = PH_4_LOWER_LIMIT;
+      if(voltage > PH_4_UPPER_LIMIT) voltage = PH_4_UPPER_LIMIT;
+      red = map(voltage,PH_4_LOWER_LIMIT,PH_4_UPPER_LIMIT,128,255); // towards acidic
+      green = 0;
+      blue = 0;
+    }else if(neutral){
+      if(voltage < PH_7_LOWER_LIMIT) voltage = PH_7_LOWER_LIMIT;
+      if(voltage > PH_7_UPPER_LIMIT) voltage = PH_7_UPPER_LIMIT;
+      red = 0;
+      green = map(voltage,PH_7_LOWER_LIMIT,PH_7_UPPER_LIMIT,128,255); // neutral range
+      blue = 0;
+    }else if(basic){
+      if(voltage < PH_7_UPPER_LIMIT) voltage = PH_7_UPPER_LIMIT;
+      if(voltage > PH_7_AND_BEYOND) voltage = PH_7_AND_BEYOND;
+      red = 0;
+      green = 0;
+      blue = map(voltage,PH_7_UPPER_LIMIT,PH_7_AND_BEYOND,128,255); // towards basic
+    }
+    else{
+      red = 0;
+      green = 0;
+      blue = 0; 
+    }
+    // Serial.printf("voltage:%d r:%d g:%d b:%d\n", voltage,red,green,blue);
+    mapRGBtoPH(red,green,blue);
+}
+
+ void mapRGBtoPH(byte r, byte g, byte b){
+      leds.setColorRGB(i, r, g, b);
   }
 
 float _map(float x, float in_min, float in_max, float out_min, float out_max){
@@ -222,7 +329,6 @@ void getTSS_NTU(){
 
   if (tssV > prevMax1) prevMax1 = tssV;
   float mapped_v = _map(tssV, 0.0, prevMax1, 2.5, 4.2); // map to 3.3V to 5V 
-  Serial.printf("volt_ori:%f  mapped_v:%f\n", tssV, mapped_v);
 
   // no need to filter tssV as we are using auto-mapped value 14.04.2022
   // if(tssV < 2.5) tssV = 2.50;
@@ -269,11 +375,11 @@ void getTSS_NTU(){
     // classTSS = " [ CLASS V ] ";
     Blynk.virtualWrite(V24, class5_use);
   }                                  
-  
-  Serial.print("\ttssVolt:");   Serial.print(tssV);
-  Serial.print("\ttss_NTU:");   Serial.print(tss_ntu);
-  Serial.print("\ttss_mg/L:");  Serial.print(tss_mgl);
-  Serial.print("\tClass:");     Serial.println(classTSS);
+  // Serial.printf("volt_ori:%f  mapped_v:%f\n", tssV, mapped_v);
+  // Serial.print("\ttssVolt:");   Serial.print(tssV);
+  // Serial.print("\ttss_NTU:");   Serial.print(tss_ntu);
+  // Serial.print("\ttss_mg/L:");  Serial.print(tss_mgl);
+  // Serial.print("\tClass:");     Serial.println(classTSS);
   Blynk.virtualWrite(V20, tss_ntu);
   Blynk.virtualWrite(V21, tss_mgl);
   Blynk.virtualWrite(V22, classTSS);
@@ -288,9 +394,6 @@ float readChannel(ADS1115_MUX channel) {
   voltage = adc.getResult_V(); // alternative: getResult_mV for Millivolt
   return voltage;
 }
-
-
-
 
 void blynk_tasks(){
   lcd.clear();
@@ -369,6 +472,7 @@ void BLYNK_HandlerTask(void * pvParameters)
     timer.setInterval(1000L, blynk_tasks);
     timer.setInterval(1000L, getINA219);
     timer.setInterval(1000L, getTSS_NTU);
+    timer.setInterval(1000L, getGPS);
 
 
   #endif
@@ -441,6 +545,52 @@ void init_eeprom(){
     Serial.print(byte(EEPROM.read(i))); Serial.println();
   }
   Serial.println();
+}
+
+
+void getGPS(){
+  // placing this block inside void loop seems to have solved the cache issue
+  // GPS begin must be called at the end of setup
+  // to avoid cache crashing issue as follows:
+  // Cache disabled but cached memory region accessed
+    #ifdef GPS_AVAILABLE
+    ss.begin(GPSBaud);
+    // printInt(gps.charsProcessed(), true, 6);
+    // printInt(gps.sentencesWithFix(), true, 10);
+    // printInt(gps.failedChecksum(), true, 9);
+    // if(gps.location.isValid()){
+      lat = gps.location.lat();
+      smartDelay(50);
+      lon = gps.location.lng();
+      smartDelay(50);
+      Serial.printf("fixLat:%f fixLon:%f\n\n\n",lat,lon);
+      String latlon = "Lat:" + String(lat) + "\t" + "Lon:" + String(lon);
+      Blynk.virtualWrite(V25, latlon);
+
+      if (millis() > 5000 && gps.charsProcessed() < 10)
+      Serial.println(F("No GPS data received: check wiring"));
+    #else
+
+    t += 0.1;
+    if(t >= 1.0) t = -1.0;
+    randomLat = cos(t * 100) / 100 ; 
+    randomLon = sin(t) * 2;
+
+    // kuching airport coordinate
+    lat = 1.4870 + randomLat;
+    lon = 110.3416 + randomLon;
+    Serial.printf("randomLat:%f randomLon:%f\n\n\n",lat,lon);
+    #endif
+}
+
+static void smartDelay(unsigned long ms)
+{
+  unsigned long start = millis();
+  do 
+  {
+    while (ss.available())
+      gps.encode(ss.read());
+  } while (millis() - start < ms);
 }
 
 
