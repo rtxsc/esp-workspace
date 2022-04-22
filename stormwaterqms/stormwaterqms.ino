@@ -1,9 +1,16 @@
 #define BLYNK_PRINT Serial // Defines the object that is used for printing
 // #define BLYNK_DEBUG        // Optional, this enables more detailed prints
+#define QMS_NODE2 // QMS_NODE1 or QMS_NODE2
 
-#define BLYNK_TEMPLATE_ID "TMPLLpuw4V7u"
-#define BLYNK_DEVICE_NAME "Stormwater QMS Template"
-#define BLYNK_AUTH_TOKEN "0lTHr8-8wkZzqMklavhHXRf7tb85sOW4"
+#ifdef QMS_NODE1
+  #define BLYNK_TEMPLATE_ID "TMPLLpuw4V7u"
+  #define BLYNK_DEVICE_NAME "Stormwater QMS Template"
+  #define BLYNK_AUTH_TOKEN "0lTHr8-8wkZzqMklavhHXRf7tb85sOW4"
+#else
+  #define BLYNK_TEMPLATE_ID "TMPLLpuw4V7u"
+  #define BLYNK_DEVICE_NAME "Stormwater QMS Node 2"
+  #define BLYNK_AUTH_TOKEN "E0TpRRx2qjxoNkeJVg3EfmD-82xoaLDr"
+#endif
 
 //#define USE_RTC
 #include "GroveBase-ESPDuino32-Mapping.h"
@@ -30,6 +37,11 @@
 #include <TinyGPS++.h>
 #include <SoftwareSerial.h>
 
+#define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP  10        /* Time ESP32 will go to sleep (in seconds) */
+
+RTC_DATA_ATTR int bootCount = 0;
+
 
 #define GPS_AVAILABLE // might contribute to cache region access error (not sure yet 3:15AM 20.3.2021)
 
@@ -53,9 +65,9 @@
 #endif
 
 
-#define I2C_ADDRESS 0x48
+#define ADS_I2C_ADDRESS       0x48
 
-#define lcd_backlight GROVE_D13
+#define lcd_backlight         GROVE_D13
 #define NUM_LEDS              1
 ChainableLED                  leds(GROVE_D6, GROVE_D7, NUM_LEDS); // (LEAVE A1 EMPTY)
 byte                          i = 0; // CHAINABLE LED ARRAY
@@ -124,7 +136,7 @@ String classTSS                   = "None";
 #define PH_7_LOWER_LIMIT    1400
 #define PH_7_UPPER_LIMIT    1600
 #define PH_7_OPTIMAL_VOLT   (PH_7_UPPER_LIMIT+PH_7_LOWER_LIMIT)/2 // Average 1500mV
-#define PH_7_AND_BEYOND     1000 // alkaline is lower than 1500mV in v2.0
+#define PH_7_AND_BEYOND     0000 // alkaline is lower than 1500mV in v2.0
 
 #define PH_4_DFROBOT_REF_V  2032  //buffer solution 4.0 at 25C
 #define PH_4_LOWER_LIMIT    1900
@@ -148,15 +160,16 @@ float current_mA;
 unsigned long previousMillis = 0;   // Stores last time temperature was published
 unsigned int interval = 60000;      // very long delay just to free up more CPU time
 bool esp_now_initialized = false;
+bool powerSaving = false;
 
-JSONVar     board;
-BlynkTimer  timer;
-DS1307      _clock;
-rgb_lcd     lcd;
-WiFiUDP     ntpUDP;
-NTPClient   timeClient(ntpUDP, "pool.ntp.org", 3600, 60000);
-Adafruit_INA219     ina219_A;
-ADS1115_WE adc = ADS1115_WE(I2C_ADDRESS);
+JSONVar         board;
+BlynkTimer      timer;
+DS1307          _clock;
+rgb_lcd         lcd;
+WiFiUDP         ntpUDP;
+NTPClient       timeClient(ntpUDP, "pool.ntp.org", 3600, 60000);
+Adafruit_INA219 ina219_A;
+ADS1115_WE      adc = ADS1115_WE(ADS_I2C_ADDRESS);
 // Variables to save date and time
 String formattedDate;
 String dayStamp;
@@ -200,10 +213,18 @@ void display_uptime_top_row(){
 String get_timestamp(){
   timeClient.update();
   formattedDate = timeClient.getFormattedDate();
-  // Extract date
+  int currentHour = timeClient.getHours();
+  int currentMin = timeClient.getMinutes();
   int splitT = formattedDate.indexOf("T");
   dayStamp = formattedDate.substring(0, splitT);
   String dateTime = timeClient.getFormattedTime() + " " + dayStamp;
+
+   if(currentHour == 12 && currentMin == 6){
+    Serial.println("Going to sleep now");
+    Serial.flush(); 
+    Blynk.virtualWrite(V14, "Deep Sleep at "+ dateTime);
+    esp_deep_sleep_start();
+  }
   return dateTime;
 }
 
@@ -243,7 +264,7 @@ float getPH(){
 
 byte red,green,blue;
 
- void setRGB_from_pH_reading(short voltage){
+void setRGB_from_pH_reading(short voltage){
     bool acidic = false;
     bool neutral = false;
     bool basic = false;
@@ -301,9 +322,12 @@ byte red,green,blue;
     mapRGBtoPH(red,green,blue);
 }
 
- void mapRGBtoPH(byte r, byte g, byte b){
+void mapRGBtoPH(byte r, byte g, byte b){
+    if(powerSaving)
+      leds.setColorRGB(i, 0, 0, 0);
+    else
       leds.setColorRGB(i, r, g, b);
-  }
+}
 
 float _map(float x, float in_min, float in_max, float out_min, float out_max){
     return float((x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min);
@@ -323,7 +347,7 @@ String class4_use     = "Irrigation";
 String class5_use     = "Hazardous Level! No use case!";
 
 
-void getTSS_NTU(){
+void get_tss_ph(){
  
   float tssV = readChannel(ADS1115_COMP_0_GND); // TODO: coming from ADS1115
 
@@ -383,16 +407,50 @@ void getTSS_NTU(){
   Blynk.virtualWrite(V20, tss_ntu);
   Blynk.virtualWrite(V21, tss_mgl);
   Blynk.virtualWrite(V22, classTSS);
+  Blynk.virtualWrite(V23, getPH());
 
   }
+
+const int numReadings = 5;
+float readings[numReadings];      // the readings from the analog input
+int readIndex = 0;              // the index of the current reading
+float total = 0;                  // the running total
+float averageVoltage = 0;                // the average
 
 float readChannel(ADS1115_MUX channel) {
   float voltage = 0.0;
   adc.setCompareChannels(channel);
   adc.startSingleMeasurement();
   while(adc.isBusy()){}
-  voltage = adc.getResult_V(); // alternative: getResult_mV for Millivolt
-  return voltage;
+
+    // voltage = adc.getResult_V(); // alternative: getResult_mV for Millivolt
+    // return voltage;
+
+  while(readIndex < numReadings){
+    voltage = adc.getResult_V(); // alternative: getResult_mV for Millivolt
+
+    // averaging algorithm
+    // subtract the last reading:
+    total = total - readings[readIndex];
+    // read from the sensor:
+    readings[readIndex] = voltage;
+    // add the reading to the total:
+    total = total + readings[readIndex];
+    // advance to the next position in the array:
+    readIndex = readIndex + 1;
+    // calculate the average:
+    averageVoltage = total / numReadings;
+    // send it to the computer as ASCII digits
+    delay(10);        // delay in between reads for stability
+  }
+    // if we're at the end of the array...
+  if (readIndex >= numReadings) {
+    // ...wrap around to the beginning:
+    Serial.printf("readIndex:%d \t averageVoltage:%f \n ",readIndex, averageVoltage);
+    readIndex = 0;
+    return averageVoltage;
+  }
+
 }
 
 void blynk_tasks(){
@@ -403,7 +461,6 @@ void blynk_tasks(){
   lcd.print(dateTime);
   Blynk.virtualWrite(V10,uptime_formatter::getUptime());
   Blynk.virtualWrite(V11, dateTime);
-  Blynk.virtualWrite(V23, getPH());
   
   Blynk.virtualWrite(V40,busvoltage);
   Blynk.virtualWrite(V41,shuntvoltage);
@@ -458,6 +515,12 @@ BLYNK_WRITE(V5){
   }
 }
 
+BLYNK_WRITE(V6){
+  int pinValue = param.asInt();
+  if(pinValue)  powerSaving = true;
+  else          powerSaving = false;
+}
+
 BLYNK_WRITE(V9){
   int pinValue = param.asInt();
   if(pinValue)  digitalWrite(lcd_backlight,HIGH);
@@ -470,9 +533,9 @@ void BLYNK_HandlerTask(void * pvParameters)
     timer.setInterval(1000L, printTimeRTC);
   #else
     timer.setInterval(1000L, blynk_tasks);
-    timer.setInterval(1000L, getINA219);
-    timer.setInterval(1000L, getTSS_NTU);
-    timer.setInterval(1000L, getGPS);
+    timer.setInterval(5000L, getINA219);
+    timer.setInterval(5000L, get_tss_ph);
+    timer.setInterval(5000L, getGPS);
 
 
   #endif
@@ -593,10 +656,39 @@ static void smartDelay(unsigned long ms)
   } while (millis() - start < ms);
 }
 
+void print_wakeup_reason(){
+  esp_sleep_wakeup_cause_t wakeup_reason;
+
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  switch(wakeup_reason)
+  {
+    case ESP_SLEEP_WAKEUP_EXT0 : Serial.println("Wakeup caused by external signal using RTC_IO"); break;
+    case ESP_SLEEP_WAKEUP_EXT1 : Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
+    case ESP_SLEEP_WAKEUP_TIMER : Serial.println("Wakeup caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD : Serial.println("Wakeup caused by touchpad"); break;
+    case ESP_SLEEP_WAKEUP_ULP : Serial.println("Wakeup caused by ULP program"); break;
+    default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
+  }
+}
 
 void setup() {
   // Initialize Serial Monitor
   Serial.begin(115200);
+  delay(1000);
+
+  //Increment boot number and print it every reboot
+  ++bootCount;
+  Serial.println("Boot number: " + String(bootCount));
+
+  //Print the wakeup reason for ESP32
+  print_wakeup_reason();
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  Serial.println("Setup ESP32 to sleep for every " + String(TIME_TO_SLEEP) +
+  " Seconds");
+
+  //esp_deep_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
+  //Serial.println("Configured all RTC Peripherals to be powered down in sleep");
 
   lcd.begin(16, 2);
   lcd.createChar(1, wave_right); // create block character
@@ -644,6 +736,9 @@ void setup() {
   }
   adc.setVoltageRange_mV(ADS1115_RANGE_4096); //comment line/change parameter to change range
 
+  for (int thisReading = 0; thisReading < numReadings; thisReading++) {
+    readings[thisReading] = 0;
+  }
 
   // timer.setInterval(100, handle_server_event);
   // timer.setInterval(15000L, Get_Ping);
