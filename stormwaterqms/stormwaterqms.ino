@@ -1,6 +1,6 @@
 #define BLYNK_PRINT Serial // Defines the object that is used for printing
 // #define BLYNK_DEBUG        // Optional, this enables more detailed prints
-#define QMS_NODE2 // QMS_NODE1 or QMS_NODE2
+#define QMS_NODE1 // QMS_NODE1 or QMS_NODE2
 
 #ifdef QMS_NODE1
   #define BLYNK_TEMPLATE_ID "TMPLLpuw4V7u"
@@ -38,7 +38,7 @@
 #include <SoftwareSerial.h>
 
 #define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  10        /* Time ESP32 will go to sleep (in seconds) */
+#define TIME_TO_SLEEP  50400       /* Time ESP32 will go to sleep (in seconds) */
 
 RTC_DATA_ATTR int bootCount = 0;
 
@@ -46,7 +46,7 @@ RTC_DATA_ATTR int bootCount = 0;
 #define GPS_AVAILABLE // might contribute to cache region access error (not sure yet 3:15AM 20.3.2021)
 
 #ifdef GPS_AVAILABLE
-  static const uint32_t GPSBaud = 9600;     // Neo6Mv2 GPS baudrate is 9600
+  static const uint32_t         GPSBaud = 9600;     // Neo6Mv2 GPS baudrate is 9600
   #define TXPin                 GROVE_D2 
   #define RXPin                 GROVE_D3
   // The TinyGPS++ object
@@ -219,10 +219,19 @@ String get_timestamp(){
   dayStamp = formattedDate.substring(0, splitT);
   String dateTime = timeClient.getFormattedTime() + " " + dayStamp;
 
-   if(currentHour == 12 && currentMin == 6){
-    Serial.println("Going to sleep now");
-    Serial.flush(); 
+   if(currentHour == 17 && currentMin >= 00){
+    Serial.println("Going to sleep now. Pushing Deep Sleep Timestamp");
     Blynk.virtualWrite(V14, "Deep Sleep at "+ dateTime);
+    Serial.flush(); 
+    lcd.clear();
+    lcd.setCursor(0, 0); // row 0, column 0
+    lcd.print("Enter Deep Sleep");
+    lcd.setCursor(0, 1); // row 0, column 0
+    lcd.print(dateTime);
+    delay(1000);
+    digitalWrite(lcd_backlight,LOW); // force off backlight
+    leds.setColorRGB(i, 0, 0, 0); // turn off RGB
+    delay(1000);
     esp_deep_sleep_start();
   }
   return dateTime;
@@ -247,71 +256,46 @@ void getINA219(){
   current_mA = ina219_A.getCurrent_mA();
 }
 
+void read_ads1115(){
+  float ch0 = readChannel(ADS1115_COMP_0_GND);    
+  float ch1 = readChannel(ADS1115_COMP_1_GND);    
+  float ch2 = readChannel(ADS1115_COMP_2_GND);    
+  float ch3 = readChannel(ADS1115_COMP_3_GND);  
+  String ads_readout = "ch0: "+ String(ch0)+"V\t ch1: "+ String(ch1)+"V\t ch2: "+ String(ch2)+"V\t ch3: "+ String(ch3)+"V";
+  Blynk.virtualWrite(V17, ads_readout);
+}
+
 #define REFERENCE_1500mV 1500
 #define CALIBRATED_NEUTRAL_V 1500
 #define CALIBRATED_ACID_V 2032.44
 
 float getPH(){
     float voltage = readChannel(ADS1115_COMP_1_GND)*1000; // TODO: coming from ADS1115   
-    setRGB_from_pH_reading(voltage); 
     // voltage = voltage - offsetVph; // disable this line if supply to pH sensor is 5.0V exact
     // phValue = ph.readPH(voltage,fluidTemp);  // convert voltage to pH with temperature compensation
     float slope = (7.0-4.0)/((CALIBRATED_NEUTRAL_V - REFERENCE_1500mV)/3.0 - (CALIBRATED_ACID_V - REFERENCE_1500mV)/3.0);  // two point: (_neutralVoltage,7.0),(_acidVoltage,4.0)
     float intercept =  7.0 - slope*(CALIBRATED_NEUTRAL_V - REFERENCE_1500mV)/3.0;
     float phValue = slope*(voltage-REFERENCE_1500mV)/3.0+intercept;
+    setRGB_from_pH_reading(phValue); 
+
     return phValue;
   }
 
 byte red,green,blue;
 
-void setRGB_from_pH_reading(short voltage){
-    bool acidic = false;
-    bool neutral = false;
-    bool basic = false;
-  
-    if(voltage > PH_4_LOWER_LIMIT && voltage < PH_4_UPPER_LIMIT){
-      acidic = true;
-      neutral = false;
-      basic = false;
-    }
-    else if(voltage > PH_7_LOWER_LIMIT && voltage < PH_7_UPPER_LIMIT){
-      acidic = false;
-      neutral = true;
-      basic = false;
-    }
-    #ifdef pHsensor_v1p1
-    else if(voltage > PH_7_UPPER_LIMIT && voltage < PH_7_AND_BEYOND){
-    #else
-    else if(voltage < PH_7_LOWER_LIMIT && voltage > PH_7_AND_BEYOND){
-    #endif
-      acidic = false;
-      neutral = false;
-      basic = true;
-    }
-    else{
-      acidic = false;
-      neutral = false;
-      basic = false;
-    }
-
-    if(acidic){
-      if(voltage < PH_4_LOWER_LIMIT) voltage = PH_4_LOWER_LIMIT;
-      if(voltage > PH_4_UPPER_LIMIT) voltage = PH_4_UPPER_LIMIT;
-      red = map(voltage,PH_4_LOWER_LIMIT,PH_4_UPPER_LIMIT,128,255); // towards acidic
+void setRGB_from_pH_reading(float ph){
+    if(ph >= 0 && ph <=4){
+      red = map(ph,4,0,64,255); // towards acidic
       green = 0;
       blue = 0;
-    }else if(neutral){
-      if(voltage < PH_7_LOWER_LIMIT) voltage = PH_7_LOWER_LIMIT;
-      if(voltage > PH_7_UPPER_LIMIT) voltage = PH_7_UPPER_LIMIT;
+    }else if(ph > 4 && ph <= 8){
       red = 0;
-      green = map(voltage,PH_7_LOWER_LIMIT,PH_7_UPPER_LIMIT,128,255); // neutral range
+      green = map(ph,4,8,64,255); // neutral range
       blue = 0;
-    }else if(basic){
-      if(voltage < PH_7_UPPER_LIMIT) voltage = PH_7_UPPER_LIMIT;
-      if(voltage > PH_7_AND_BEYOND) voltage = PH_7_AND_BEYOND;
+    }else if(ph > 8 && ph <= 14){
       red = 0;
       green = 0;
-      blue = map(voltage,PH_7_UPPER_LIMIT,PH_7_AND_BEYOND,128,255); // towards basic
+      blue = map(ph,8,14,64,255); // towards basic
     }
     else{
       red = 0;
@@ -441,12 +425,12 @@ float readChannel(ADS1115_MUX channel) {
     // calculate the average:
     averageVoltage = total / numReadings;
     // send it to the computer as ASCII digits
-    delay(10);        // delay in between reads for stability
+    delay(15);        // delay in between reads for stability
   }
     // if we're at the end of the array...
   if (readIndex >= numReadings) {
     // ...wrap around to the beginning:
-    Serial.printf("readIndex:%d \t averageVoltage:%f \n ",readIndex, averageVoltage);
+    // Serial.printf("readIndex:%d \t averageVoltage:%f \n ",readIndex, averageVoltage);
     readIndex = 0;
     return averageVoltage;
   }
@@ -460,8 +444,7 @@ void blynk_tasks(){
   lcd.setCursor(0,1);
   lcd.print(dateTime);
   Blynk.virtualWrite(V10,uptime_formatter::getUptime());
-  Blynk.virtualWrite(V11, dateTime);
-  
+  Blynk.virtualWrite(V11, dateTime);  
   Blynk.virtualWrite(V40,busvoltage);
   Blynk.virtualWrite(V41,shuntvoltage);
   Blynk.virtualWrite(V42,current_mA);
@@ -470,11 +453,12 @@ void blynk_tasks(){
 BLYNK_CONNECTED() {
   timeClient.setTimeOffset(28800);
   restart_ts = get_timestamp();
-  Blynk.syncVirtual(V0, V1, V2, V3);
+  Blynk.syncVirtual(V0, V1, V2, V3, V6, V9);
   Blynk.virtualWrite(V12,WiFi.localIP().toString());
   Blynk.virtualWrite(V13,ssid);
   Blynk.virtualWrite(V16, restart_ts); 
   Blynk.virtualWrite(V15,restartCounter);
+  Blynk.virtualWrite(V14, "Woken up at "+ restart_ts);
 }
 
 BLYNK_WRITE(V4){
@@ -533,6 +517,7 @@ void BLYNK_HandlerTask(void * pvParameters)
     timer.setInterval(1000L, printTimeRTC);
   #else
     timer.setInterval(1000L, blynk_tasks);
+    timer.setInterval(1000L, read_ads1115);
     timer.setInterval(5000L, getINA219);
     timer.setInterval(5000L, get_tss_ph);
     timer.setInterval(5000L, getGPS);
