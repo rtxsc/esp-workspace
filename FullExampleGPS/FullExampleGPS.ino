@@ -2,21 +2,20 @@
 #include <SoftwareSerial.h>
 
 #define LCD_AVAILABLE
+//#define GROVE_LCD // uncomment this if using GROVE LCD
 
 #ifdef LCD_AVAILABLE
-//  #include "rgb_lcd.h"
-//  rgb_lcd        lcd;
-  #include <Wire.h> 
-  #include <LiquidCrystal_I2C.h>
-  LiquidCrystal_I2C lcd(0x27,16,2);  // set the LCD address to 0x27 for a 16 chars and 2 line display
-
+  #ifdef GROVE_LCD
+    #include "rgb_lcd.h"
+    rgb_lcd        lcd;
+  #else
+    #include <Wire.h> 
+    #include <LiquidCrystal_I2C.h>
+    LiquidCrystal_I2C lcd(0x27,16,2); 
+  #endif
 #endif
-/*
-   This sample code demonstrates the normal use of a TinyGPS++ (TinyGPSPlus) object.
-   It requires the use of SoftwareSerial, and assumes that you have a
-   4800-baud serial GPS device hooked up on pins 4(rx) and 3(tx).
-*/
-static const int RXPin = 6, TXPin = 7;
+
+static const int RXPin = 6, TXPin = 7; // D6->TXgps D7->RXgps
 static const uint32_t GPSBaud = 9600;
 int currentCharsInt = 0;
 int prevCharsInt = 0;
@@ -105,9 +104,10 @@ void loop()
   #ifdef LCD_AVAILABLE
   lcd.clear();
   lcd.setCursor(0, 0); // row 1, column 0
-  lcd.print("Lt:" +String(gps.location.lat())+ " Sat:"+ String(gps.satellites.value())  );
+  lcd.print(String(float(gps.location.lat()),4)+ " S:"+ String(gps.satellites.value()));
+  lcd.print(" "+String(gps.speed.kmph()));
   lcd.setCursor(0, 1); // row 1, column 0
-  lcd.print("Ln:" +String(gps.location.lng()) + " C:"+ String(currentCharsInt));
+  lcd.print(String(float(gps.location.lng()),4) + " C:"+ String(currentCharsInt));
   #endif
   
   smartDelay(1000);
