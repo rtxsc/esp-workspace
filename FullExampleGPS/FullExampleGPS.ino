@@ -1,8 +1,10 @@
 #include <TinyGPS++.h>
 #include <SoftwareSerial.h>
+#include "GroveBase-ESPDuino32-Mapping.h"
+
 
 #define LCD_AVAILABLE
-//#define GROVE_LCD // uncomment this if using GROVE LCD
+#define GROVE_LCD // uncomment this if using GROVE LCD
 
 #ifdef LCD_AVAILABLE
   #ifdef GROVE_LCD
@@ -15,7 +17,7 @@
   #endif
 #endif
 
-static const int RXPin = 6, TXPin = 7; // D6->TXgps D7->RXgps
+static const int RXPin = GROVE_D6, TXPin = GROVE_D7; // D6->TXgps D7->RXgps | GROVE_D6 / GROVE_D7 on ESP32
 static const uint32_t GPSBaud = 9600;
 int currentCharsInt = 0;
 int prevCharsInt = 0;
@@ -31,9 +33,12 @@ void setup()
   Serial.begin(115200);
 
     #ifdef LCD_AVAILABLE
-//    lcd.begin(16, 2); // Grove Blue Backlit LCD
-    lcd.init();         // Normal i2c LCD
-    lcd.backlight();    // Normal i2c LCD
+      #ifdef GROVE_LCD
+        lcd.begin(16, 2); // Grove Blue Backlit LCD
+      #else
+        lcd.init();         // Normal i2c LCD
+        lcd.backlight();    // Normal i2c LCD
+    #endif
     lcd.setCursor(0, 0); // row 1, column 0
     lcd.print("IoT Node GPS"); // MAKE SURE THIS IS CHECKED BEFORE UPLOAD  
     lcd.setCursor(0, 1); // row 1, column 0
@@ -53,46 +58,46 @@ void setup()
 
 void loop()
 { 
-  static const double LONDON_LAT = 51.508131, LONDON_LON = -0.128002;
-  Serial.println(F("Sats HDOP  Latitude   Longitude   Fix  Date       Time     Date Alt    Course Speed Card  Distance Course Card  Chars Sentences Checksum"));
-  Serial.println(F("           (deg)      (deg)       Age                      Age  (m)    --- from GPS ----  ---- to London  ----  RX    RX        Fail"));
-  Serial.println(F("----------------------------------------------------------------------------------------------------------------------------------------"));
-  printInt(gps.satellites.value(), gps.satellites.isValid(), 5);
-  printFloat(gps.hdop.hdop(), gps.hdop.isValid(), 6, 1);
-  printFloat(gps.location.lat(), gps.location.isValid(), 11, 6);
-  printFloat(gps.location.lng(), gps.location.isValid(), 12, 6);
-  printInt(gps.location.age(), gps.location.isValid(), 5);
-  printDateTime(gps.date, gps.time);
-  printFloat(gps.altitude.meters(), gps.altitude.isValid(), 7, 2);
-  printFloat(gps.course.deg(), gps.course.isValid(), 7, 2);
-  printFloat(gps.speed.kmph(), gps.speed.isValid(), 6, 2);
-  printStr(gps.course.isValid() ? TinyGPSPlus::cardinal(gps.course.deg()) : "*** ", 6);
+//  static const double LONDON_LAT = 51.508131, LONDON_LON = -0.128002;
+//  Serial.println(F("Sats HDOP  Latitude   Longitude   Fix  Date       Time     Date Alt    Course Speed Card  Distance Course Card  Chars Sentences Checksum"));
+//  Serial.println(F("           (deg)      (deg)       Age                      Age  (m)    --- from GPS ----  ---- to London  ----  RX    RX        Fail"));
+//  Serial.println(F("----------------------------------------------------------------------------------------------------------------------------------------"));
+//  printInt(gps.satellites.value(), gps.satellites.isValid(), 5);
+//  printFloat(gps.hdop.hdop(), gps.hdop.isValid(), 6, 1);
+//  printFloat(gps.location.lat(), gps.location.isValid(), 11, 6);
+//  printFloat(gps.location.lng(), gps.location.isValid(), 12, 6);
+//  printInt(gps.location.age(), gps.location.isValid(), 5);
+//  printDateTime(gps.date, gps.time);
+//  printFloat(gps.altitude.meters(), gps.altitude.isValid(), 7, 2);
+//  printFloat(gps.course.deg(), gps.course.isValid(), 7, 2);
+//  printFloat(gps.speed.kmph(), gps.speed.isValid(), 6, 2);
+//  printStr(gps.course.isValid() ? TinyGPSPlus::cardinal(gps.course.deg()) : "*** ", 6);
+//
+//  unsigned long distanceKmToLondon =
+//    (unsigned long)TinyGPSPlus::distanceBetween(
+//      gps.location.lat(),
+//      gps.location.lng(),
+//      LONDON_LAT, 
+//      LONDON_LON) / 1000;
+//  printInt(distanceKmToLondon, gps.location.isValid(), 9);
+//
+//  double courseToLondon =
+//    TinyGPSPlus::courseTo(
+//      gps.location.lat(),
+//      gps.location.lng(),
+//      LONDON_LAT, 
+//      LONDON_LON);
+//
+//  printFloat(courseToLondon, gps.location.isValid(), 7, 2);
+//
+//  const char *cardinalToLondon = TinyGPSPlus::cardinal(courseToLondon);
+//
+//  printStr(gps.location.isValid() ? cardinalToLondon : "*** ", 6);
 
-  unsigned long distanceKmToLondon =
-    (unsigned long)TinyGPSPlus::distanceBetween(
-      gps.location.lat(),
-      gps.location.lng(),
-      LONDON_LAT, 
-      LONDON_LON) / 1000;
-  printInt(distanceKmToLondon, gps.location.isValid(), 9);
-
-  double courseToLondon =
-    TinyGPSPlus::courseTo(
-      gps.location.lat(),
-      gps.location.lng(),
-      LONDON_LAT, 
-      LONDON_LON);
-
-  printFloat(courseToLondon, gps.location.isValid(), 7, 2);
-
-  const char *cardinalToLondon = TinyGPSPlus::cardinal(courseToLondon);
-
-  printStr(gps.location.isValid() ? cardinalToLondon : "*** ", 6);
-
-  printInt(gps.charsProcessed()/162, true, 6);
-  printInt(gps.sentencesWithFix(), true, 10);
-  printInt(gps.failedChecksum(), true, 9);
-  Serial.println();
+//  printInt(gps.charsProcessed()/162, true, 6);
+//  printInt(gps.sentencesWithFix(), true, 10);
+//  printInt(gps.failedChecksum(), true, 9);
+//  Serial.println();
   
   currentCharsInt = gps.charsProcessed()/162;
   if(prevCharsInt != currentCharsInt){

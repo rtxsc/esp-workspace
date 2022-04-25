@@ -47,14 +47,19 @@ RTC_DATA_ATTR int bootCount = 0;
 
 #ifdef GPS_AVAILABLE
   static const uint32_t         GPSBaud = 9600;     // Neo6Mv2 GPS baudrate is 9600
-  #define TXPin                 GROVE_D2 
-  #define RXPin                 GROVE_D3
+//  #define TXPin                 GROVE_D7 
+//  #define RXPin                 GROVE_D6
+  static const int RXPin = GROVE_D6, TXPin = GROVE_D7; // D6->TXgps D7->RXgps | GROVE_D6 / GROVE_D7 on ESP32
+  int currentCharsInt = 0;
+  int prevCharsInt = 0;
   // The TinyGPS++ object
   TinyGPSPlus gps;
   // The serial connection to the GPS device
   SoftwareSerial ss(RXPin, TXPin);
   double lat;
   double lon;
+  String latlon;
+  int sat_count=0;
 #else
   // kuching airport coordinate
   float t = 0.0;
@@ -69,10 +74,10 @@ RTC_DATA_ATTR int bootCount = 0;
 
 #define lcd_backlight         GROVE_D13
 #define NUM_LEDS              1
-ChainableLED                  leds(GROVE_D6, GROVE_D7, NUM_LEDS); // (LEAVE A1 EMPTY)
+ChainableLED                  leds(GROVE_D4, GROVE_D5, NUM_LEDS); // (LEAVE A1 EMPTY)
 byte                          i = 0; // CHAINABLE LED ARRAY
 
-TaskHandle_t Task1; // ESPNOW
+TaskHandle_t Task1; // GPS HANDLER
 TaskHandle_t Task2; // BLYNK
 String classTSS                   = "None";
 
@@ -329,7 +334,7 @@ String class3_use_f3  = "Fishery III - Common aquatic species / livestock drinki
 
 String class4_use     = "Irrigation";
 String class5_use     = "Hazardous Level! No use case!";
-
+float tss_mgl = 0;
 
 void get_tss_ph(){
  
@@ -347,7 +352,7 @@ void get_tss_ph(){
   if(tss_ntu < 0.0) tss_ntu = 0.0;
   if(tss_ntu > 3000.0) tss_ntu = 3000.0; // max NTU readout by Dfrobot
 
-  float tss_mgl = tss_ntu / 3 ; // 1 mgL = 3 NTU
+  tss_mgl = tss_ntu / 3 ; // 1 mgL = 3 NTU
 
   if(tss_mgl<25)                        classTSS = " [ CLASS I ] ";
   else if(tss_mgl>=25 && tss_mgl<50)    classTSS = " [ CLASS IIA/B ] ";
@@ -437,17 +442,44 @@ float readChannel(ADS1115_MUX channel) {
 
 }
 
+int display_menu = 0;
+
 void blynk_tasks(){
+  display_menu++;
   lcd.clear();
   String dateTime = get_timestamp();
-  display_uptime_top_row();
-  lcd.setCursor(0,1);
-  lcd.print(dateTime);
-  Blynk.virtualWrite(V10,uptime_formatter::getUptime());
+  
+  if(display_menu == 1){
+      display_uptime_top_row();
+      lcd.setCursor(0,1);
+      lcd.print(dateTime);
+   }
+   else if(display_menu == 2)
+   {
+    lcd.clear();
+    lcd.setCursor(0, 0); // row 0, column 0
+    lcd.print(String(float(lat),4)+ " Sat:"+ String(sat_count));
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print(String(float(lon),4) + " C:"+ String(currentCharsInt));
+  }
+  else{
+    lcd.clear();
+    lcd.setCursor(0, 0); // row 0, column 0
+    lcd.print("V:"+ String(busvoltage,2) + "V C:"+ String(current_mA,2)+"mA");
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print("pH:"+String(getPH(),2) + " TSS:"+ String(int(tss_mgl)));
+    
+  }
+
+  if(display_menu>3) display_menu = 0;
+
+  Blynk.virtualWrite(V10, uptime_formatter::getUptime());
   Blynk.virtualWrite(V11, dateTime);  
-  Blynk.virtualWrite(V40,busvoltage);
-  Blynk.virtualWrite(V41,shuntvoltage);
-  Blynk.virtualWrite(V42,current_mA);
+  Blynk.virtualWrite(V25, latlon);
+  Blynk.virtualWrite(V40, busvoltage);
+  Blynk.virtualWrite(V41, shuntvoltage);
+  Blynk.virtualWrite(V42, current_mA);
+
 }
 
 BLYNK_CONNECTED() {
@@ -511,18 +543,50 @@ BLYNK_WRITE(V9){
   else          digitalWrite(lcd_backlight,LOW);
 }
 
+void GPS_HandlerTask(void * pvParameters) 
+{
+  Serial.println("Initializing GPS on ESP32");
+  delay(1000);
+  ss.begin(GPSBaud);
+  Serial.print("GPS_HandlerTask running on core ");
+  Serial.println(xPortGetCoreID());
+  delay(1000);
+  for(;;){    
+
+     #ifdef GPS_AVAILABLE
+      lat             = gps.location.lat();
+      lon             = gps.location.lng();
+      sat_count       = gps.satellites.value();
+      currentCharsInt = gps.charsProcessed()/162;
+      
+      if(prevCharsInt != currentCharsInt){
+        prevCharsInt = currentCharsInt;
+      }
+      else{
+        Serial.println(F("[MISSING SIGNAL] No GPS data received: check wiring"));
+      }
+
+      smartDelay(1000);
+
+      Serial.printf("Char: %d Found_Lat:%f Found_Lon:%f Sat:%d\n",currentCharsInt,lat,lon,sat_count);
+      latlon = "Lat:" + String(lat,4) + " " + "Lon:" + String(lon,4); // stringify coord for blynk write
+  
+      if (millis() > 5000 && gps.charsProcessed() < 10)
+        Serial.println(F("No GPS data received: check wiring"));
+      #endif
+
+  }
+} // end of FreeRTOS handler
+
 void BLYNK_HandlerTask(void * pvParameters) 
 {
   #ifdef USE_RTC
     timer.setInterval(1000L, printTimeRTC);
   #else
     timer.setInterval(1000L, blynk_tasks);
-    timer.setInterval(1000L, read_ads1115);
+    timer.setInterval(5000L, read_ads1115);
     timer.setInterval(5000L, getINA219);
     timer.setInterval(5000L, get_tss_ph);
-    timer.setInterval(5000L, getGPS);
-
-
   #endif
   Serial.print("BLYNK_HandlerTask running on core ");
   Serial.println(xPortGetCoreID());
@@ -593,42 +657,6 @@ void init_eeprom(){
     Serial.print(byte(EEPROM.read(i))); Serial.println();
   }
   Serial.println();
-}
-
-
-void getGPS(){
-  // placing this block inside void loop seems to have solved the cache issue
-  // GPS begin must be called at the end of setup
-  // to avoid cache crashing issue as follows:
-  // Cache disabled but cached memory region accessed
-    #ifdef GPS_AVAILABLE
-    ss.begin(GPSBaud);
-    // printInt(gps.charsProcessed(), true, 6);
-    // printInt(gps.sentencesWithFix(), true, 10);
-    // printInt(gps.failedChecksum(), true, 9);
-    // if(gps.location.isValid()){
-      lat = gps.location.lat();
-      smartDelay(50);
-      lon = gps.location.lng();
-      smartDelay(50);
-      Serial.printf("fixLat:%f fixLon:%f\n\n\n",lat,lon);
-      String latlon = "Lat:" + String(lat) + "\t" + "Lon:" + String(lon);
-      Blynk.virtualWrite(V25, latlon);
-
-      if (millis() > 5000 && gps.charsProcessed() < 10)
-      Serial.println(F("No GPS data received: check wiring"));
-    #else
-
-    t += 0.1;
-    if(t >= 1.0) t = -1.0;
-    randomLat = cos(t * 100) / 100 ; 
-    randomLon = sin(t) * 2;
-
-    // kuching airport coordinate
-    lat = 1.4870 + randomLat;
-    lon = 110.3416 + randomLon;
-    Serial.printf("randomLat:%f randomLon:%f\n\n\n",lat,lon);
-    #endif
 }
 
 static void smartDelay(unsigned long ms)
@@ -736,6 +764,16 @@ void setup() {
       1,                        /* priority of the task */
       &Task2,                   /* Task handle to keep track of created task */
       CORE_0);                  /* pin task to core 0 */     
+  delay(500); 
+
+  xTaskCreatePinnedToCore(
+      GPS_HandlerTask,        /* Task function. */
+      "GPS Streamer",            /* name of task. */
+      10000,                    /* Stack size of task */
+      NULL,                     /* parameter of the task */
+      1,                        /* priority of the task */
+      &Task1,                   /* Task handle to keep track of created task */
+      CORE_1);                  /* pin task to core 1 */     
   delay(500); 
 
 }
