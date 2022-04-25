@@ -1,6 +1,6 @@
 #define BLYNK_PRINT Serial // Defines the object that is used for printing
 // #define BLYNK_DEBUG        // Optional, this enables more detailed prints
-#define QMS_NODE1 // QMS_NODE1 or QMS_NODE2
+#define QMS_NODE2 // QMS_NODE1 or QMS_NODE2
 
 #ifdef QMS_NODE1
   #define BLYNK_TEMPLATE_ID "TMPLLpuw4V7u"
