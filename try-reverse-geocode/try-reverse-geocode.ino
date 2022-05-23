@@ -54,7 +54,7 @@ void get_formatted_address(float lat, float lon){
   String url = urlPiece + lat + ',' + lon + urlKey;
 
   while (!client.connect(server, httpPort)) {
-    Serial.printf("[ERROR]: Connection to %s failed!", server);
+    Serial.printf("[ERROR]: Connection to %s failed!\n", server);
     Serial.println("Waiting 2 secs");
     delay(2000);
     Serial.println("Retrying connecting...");
@@ -81,14 +81,16 @@ void get_formatted_address(float lat, float lon){
       if (line == "\r") {
         Serial.println("[INFO] Headers received successfully"); //  skip response header / end of header found
         break;
+      }else{
+        Serial.println("[WARNING] Headers not received!"); 
       }
     }
 // if there are incoming bytes available
 // from the server, read them and print them:
-//    while (client.available()) {
-//      char c = client.read();
-//      Serial.write(c);
-//    }
+   while (client.available()) {
+     char c = client.read();
+     Serial.write(c);
+   }
    
     Serial.println("Performing ArduinoJSON stuff now...");
     //Use arduinojson.org/assistant to compute the capacity.

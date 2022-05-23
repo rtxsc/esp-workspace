@@ -11,6 +11,7 @@
   #define BLYNK_DEVICE_NAME "Stormwater QMS Node 2"
   #define BLYNK_AUTH_TOKEN "E0TpRRx2qjxoNkeJVg3EfmD-82xoaLDr"
 #endif
+#include <WiFiClientSecure.h>
 
 //#define USE_RTC
 #include "GroveBase-ESPDuino32-Mapping.h"
