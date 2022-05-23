@@ -22,8 +22,8 @@
   const int httpPort = 443;
   String urlPiece = "/maps/api/geocode/json?latlng=";
   String urlKey = "&key=AIzaSyD5Veclfg27JklUnd_6jD5OtktCfmQg8Gc";
-  String formatted_address = "None";
-  String prev_formatted_address = "None";
+  String formatted_address = "Locating address...";
+  String dummy_address_selection = "Locating dummy address...";
 
 #else
   #include <WiFiClient.h>
@@ -76,6 +76,8 @@ RTC_DATA_ATTR int bootCount = 0;
   SoftwareSerial ss(RXPin, TXPin);
   double lat;
   double lon;
+  double prev_lat;
+  double prev_lon;
   String latlon;
   int sat_count=0;
 #else
@@ -498,6 +500,7 @@ void blynk_tasks(){
   Blynk.virtualWrite(V10, uptime_formatter::getUptime());
   Blynk.virtualWrite(V11, dateTime);  
   Blynk.virtualWrite(V18, formatted_address);
+  Blynk.virtualWrite(V19, dummy_address_selection);
   Blynk.virtualWrite(V25, latlon);
   Blynk.virtualWrite(V40, busvoltage);
   Blynk.virtualWrite(V41, shuntvoltage);
@@ -513,6 +516,39 @@ BLYNK_CONNECTED() {
   Blynk.virtualWrite(V16, restart_ts); 
   Blynk.virtualWrite(V15,restartCounter);
   Blynk.virtualWrite(V14, "Woken up at "+ restart_ts);
+}
+
+BLYNK_WRITE(V2){
+  int pinValue = param.asInt();
+  if(dummy_gps){
+    if(pinValue == 1){
+      // pelabuhan tawau 4.24524707737371, 117.8798812786642
+      lat =  4.24524707737371; 
+      lon = 117.8798812786642;
+      dummy_address_selection = "Pelabuhan Tawau";
+    }
+    if(pinValue == 2){
+      // sandakan waterfront 5.836858719162623, 118.11437798632956
+      lat = 5.836858719162623;
+      lon = 118.11437798632956;
+      dummy_address_selection = "Sandakan Waterfront";
+
+    }
+    if(pinValue == 3){
+      // darul hana bridge
+      lat = 1.5613590617188766;
+      lon = 110.3459666550215;
+      dummy_address_selection = "Darul Hana Bridge";
+
+    }
+     if(pinValue == 4){
+      // satok bridge  // 1.5551582481994255, 110.32391190055193
+      lat = 1.5551582481994255;
+      lon = 110.32391190055193;
+      dummy_address_selection = "Satok Suspension Bridge";
+
+    }
+  }
 }
 
 BLYNK_WRITE(V3){
@@ -586,16 +622,14 @@ void GPS_HandlerTask(void * pvParameters)
       if(!dummy_gps){
         lat = gps.location.lat();
         lon = gps.location.lng();
-      }else{
-        lat =  1.4870; 
-        lon = 110.3416;
       }
       sat_count       = gps.satellites.value();
       currentCharsInt = gps.charsProcessed()/162;
 
-      if(lat != 0 && lon != 0 && strcmp(prev_formatted_address,formatted_address)!=0 ){
+      if(lat != 0 && lon != 0 && prev_lat!= lat && prev_lon != lon){
         formatted_address = get_formatted_address(lat,lon);
-        prev_formatted_address = formatted_address;
+        prev_lat = lat;
+        prev_lon = lon;
       }
 
       if(prevCharsInt != currentCharsInt){
@@ -765,7 +799,7 @@ String get_formatted_address(float lat, float lon){
     Serial.println("client.stop() called");
     if (!root.success()) {
       Serial.println(F("Parsing failed!"));
-      return;
+      return "Parsing failed!";
     }else{
       Serial.println(F("Parsing successful!"));
     }
