@@ -1,6 +1,7 @@
 #define BLYNK_PRINT Serial // Defines the object that is used for printing
 // #define BLYNK_DEBUG        // Optional, this enables more detailed prints
 #define QMS_NODE2 // QMS_NODE1 or QMS_NODE2
+#define SECURE_CONN
 
 #ifdef QMS_NODE1
   #define BLYNK_TEMPLATE_ID "TMPLLpuw4V7u"
@@ -11,20 +12,35 @@
   #define BLYNK_DEVICE_NAME "Stormwater QMS Node 2"
   #define BLYNK_AUTH_TOKEN "E0TpRRx2qjxoNkeJVg3EfmD-82xoaLDr"
 #endif
-#include <WiFiClientSecure.h>
+
+#ifdef SECURE_CONN
+  #include <WiFiClientSecure.h>
+  #include <ArduinoJson.h>
+  
+  WiFiClientSecure client; // 23.05.2022 Monday
+  const char*  server = "https://maps.googleapis.com";  // Server URL
+  const int httpPort = 443;
+  String urlPiece = "/maps/api/geocode/json?latlng=";
+  String urlKey = "&key=AIzaSyD5Veclfg27JklUnd_6jD5OtktCfmQg8Gc";
+  String formatted_address = "None";
+  String prev_formatted_address = "None";
+
+#else
+  #include <WiFiClient.h>
+  #include <WiFi.h>
+  #include "ESPAsyncWebServer.h" // dont know if i still need this 23.05.2022
+#endif
 
 //#define USE_RTC
+
 #include "GroveBase-ESPDuino32-Mapping.h"
 #include <ChainableLED.h>
 #include <esp_now.h>
-#include <WiFi.h>
 #include <ESP32Ping.h>
-#include <WiFiClient.h>
+
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 
-#include "ESPAsyncWebServer.h"
-#include <Arduino_JSON.h>
 #include <BlynkSimpleEsp32.h>
 #include <Wire.h>
 #include "rgb_lcd.h"
@@ -47,6 +63,7 @@ RTC_DATA_ATTR int bootCount = 0;
 #define GPS_AVAILABLE // might contribute to cache region access error (not sure yet 3:15AM 20.3.2021)
 
 #ifdef GPS_AVAILABLE
+  bool dummy_gps = false;
   static const uint32_t         GPSBaud = 9600;     // Neo6Mv2 GPS baudrate is 9600
 //  #define TXPin                 GROVE_D7 
 //  #define RXPin                 GROVE_D6
@@ -172,7 +189,6 @@ unsigned int interval = 60000;      // very long delay just to free up more CPU 
 bool esp_now_initialized = false;
 bool powerSaving = false;
 
-JSONVar         board;
 BlynkTimer      timer;
 DS1307          _clock;
 rgb_lcd         lcd;
@@ -437,14 +453,15 @@ float readChannel(ADS1115_MUX channel) {
     // send it to the computer as ASCII digits
     delay(15);        // delay in between reads for stability
   }
-    // if we're at the end of the array...
+
+  // if we're at the end of the array...
   if (readIndex >= numReadings) {
     // ...wrap around to the beginning:
     // Serial.printf("readIndex:%d \t averageVoltage:%f \n ",readIndex, averageVoltage);
     readIndex = 0;
     return averageVoltage;
   }
-
+  return voltage;
 }
 
 int display_menu = 0;
@@ -480,11 +497,11 @@ void blynk_tasks(){
 
   Blynk.virtualWrite(V10, uptime_formatter::getUptime());
   Blynk.virtualWrite(V11, dateTime);  
+  Blynk.virtualWrite(V18, formatted_address);
   Blynk.virtualWrite(V25, latlon);
   Blynk.virtualWrite(V40, busvoltage);
   Blynk.virtualWrite(V41, shuntvoltage);
   Blynk.virtualWrite(V42, current_mA);
-
 }
 
 BLYNK_CONNECTED() {
@@ -496,6 +513,12 @@ BLYNK_CONNECTED() {
   Blynk.virtualWrite(V16, restart_ts); 
   Blynk.virtualWrite(V15,restartCounter);
   Blynk.virtualWrite(V14, "Woken up at "+ restart_ts);
+}
+
+BLYNK_WRITE(V3){
+  int pinValue = param.asInt();
+  if(pinValue)  dummy_gps = true;
+  else          dummy_gps = false;
 }
 
 BLYNK_WRITE(V4){
@@ -548,6 +571,7 @@ BLYNK_WRITE(V9){
   else          digitalWrite(lcd_backlight,LOW);
 }
 
+
 void GPS_HandlerTask(void * pvParameters) 
 {
   Serial.println("Initializing GPS on ESP32");
@@ -559,11 +583,21 @@ void GPS_HandlerTask(void * pvParameters)
   for(;;){    
 
      #ifdef GPS_AVAILABLE
-      lat             = gps.location.lat();
-      lon             = gps.location.lng();
+      if(!dummy_gps){
+        lat = gps.location.lat();
+        lon = gps.location.lng();
+      }else{
+        lat =  1.4870; 
+        lon = 110.3416;
+      }
       sat_count       = gps.satellites.value();
       currentCharsInt = gps.charsProcessed()/162;
-      
+
+      if(lat != 0 && lon != 0 && strcmp(prev_formatted_address,formatted_address)!=0 ){
+        formatted_address = get_formatted_address(lat,lon);
+        prev_formatted_address = formatted_address;
+      }
+
       if(prevCharsInt != currentCharsInt){
         prevCharsInt = currentCharsInt;
       }
@@ -573,7 +607,7 @@ void GPS_HandlerTask(void * pvParameters)
 
       smartDelay(1000);
 
-      Serial.printf("Char: %d Found_Lat:%f Found_Lon:%f Sat:%d\n",currentCharsInt,lat,lon,sat_count);
+      // Serial.printf("Char: %d Found_Lat:%f Found_Lon:%f Sat:%d\n",currentCharsInt,lat,lon,sat_count);
       latlon = "Lat:" + String(lat,4) + " " + "Lon:" + String(lon,4); // stringify coord for blynk write
   
       if (millis() > 5000 && gps.charsProcessed() < 10)
@@ -690,10 +724,73 @@ void print_wakeup_reason(){
   }
 }
 
+String get_formatted_address(float lat, float lon){
+  String url = urlPiece + lat + ',' + lon + urlKey;
+
+  while (!client.connect(server, httpPort)) {
+    Serial.printf("[ERROR]: Connection to %s failed!\n", server);
+    Serial.println("Waiting 200 ms");
+    delay(200);
+    Serial.println("Retrying connecting...");
+  }
+  
+  Serial.printf("[SUCCESS]: Connected to Google Maps server: %s \n",server);
+  
+  Serial.print("\nSending HTTPS Request.\n");
+  Serial.println(server + url + "\n");
+  client.print(String("GET ") + url + "\r\n" +
+               "Host: " + server + "\r\n" +
+               "Connection: close\r\n\r\n");
+
+    while (client.connected()) {
+      String line = client.readStringUntil('\n');
+      if (line == "\r") {
+        Serial.println("[SUCCESS] Headers received successfully"); //  skip response header / end of header found
+        break;
+      }else{
+        Serial.print("-"); // [WARNING] Headers not received!
+      }
+    }
+
+    Serial.println("Performing ArduinoJSON stuff now...");
+    //Use arduinojson.org/assistant to compute the capacity.
+    const size_t bufferSize = JSON_ARRAY_SIZE(1) + 2 * JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(3) + 120;
+    
+    //Allocate JsonBuffer
+    DynamicJsonBuffer jsonBuffer(bufferSize);
+    
+    //Parse JSON object
+    JsonObject& root = jsonBuffer.parseObject(client);
+    client.stop();
+    Serial.println("client.stop() called");
+    if (!root.success()) {
+      Serial.println(F("Parsing failed!"));
+      return;
+    }else{
+      Serial.println(F("Parsing successful!"));
+    }
+
+    JsonObject& results0 = root["results"][0];
+    String results0_formatted_address = results0["formatted_address"];
+    for(int i = 0 ; i < results0_formatted_address.length() ; i++)
+      Serial.print("#");
+    Serial.println();
+    Serial.println(results0_formatted_address);
+    for(int i = 0 ; i < results0_formatted_address.length() ; i++)
+      Serial.print("#");
+    Serial.println();
+
+    return results0_formatted_address;
+  
+}
+
 void setup() {
   // Initialize Serial Monitor
   Serial.begin(115200);
   delay(1000);
+  #ifdef SECURE_CONN
+  client.setInsecure(); // dedicated for Google Maps API 
+  #endif
 
   //Increment boot number and print it every reboot
   ++bootCount;

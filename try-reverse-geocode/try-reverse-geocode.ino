@@ -79,19 +79,22 @@ void get_formatted_address(float lat, float lon){
     while (client.connected()) {
       String line = client.readStringUntil('\n');
       if (line == "\r") {
-        Serial.println("[INFO] Headers received successfully"); //  skip response header / end of header found
+        Serial.println("[SUCCESS] Headers received successfully"); //  skip response header / end of header found
         break;
       }else{
-        Serial.println("[WARNING] Headers not received!"); 
+        Serial.print("-"); // [WARNING] Headers not received!
+        delay(100);
       }
     }
 // if there are incoming bytes available
-// from the server, read them and print them:
+// from the server, read them and print them: 
+/* 
+// [DO NOT ENABLE THESE LINES | ONLY FOR DEBUGGING | INTERFERE WITH parseObject] 
    while (client.available()) {
      char c = client.read();
      Serial.write(c);
    }
-   
+*/
     Serial.println("Performing ArduinoJSON stuff now...");
     //Use arduinojson.org/assistant to compute the capacity.
     const size_t bufferSize = JSON_ARRAY_SIZE(1) + 2 * JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(3) + 120;
