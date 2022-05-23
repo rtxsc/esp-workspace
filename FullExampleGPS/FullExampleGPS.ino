@@ -4,7 +4,7 @@
 
 
 #define LCD_AVAILABLE
-#define GROVE_LCD // uncomment this if using GROVE LCD
+//#define GROVE_LCD // uncomment this if using GROVE LCD
 
 #ifdef LCD_AVAILABLE
   #ifdef GROVE_LCD
@@ -16,8 +16,8 @@
     LiquidCrystal_I2C lcd(0x27,16,2); 
   #endif
 #endif
-
-static const int RXPin = GROVE_D6, TXPin = GROVE_D7; // D6->TXgps D7->RXgps | GROVE_D6 / GROVE_D7 on ESP32
+static const int RXPin = 6, TXPin = 7; // D6->TXgps D7->RXgps | GROVE_D6 / GROVE_D7 on ESP32
+//static const int RXPin = GROVE_D6, TXPin = GROVE_D7; // D6->TXgps D7->RXgps | GROVE_D6 / GROVE_D7 on ESP32
 static const uint32_t GPSBaud = 9600;
 int currentCharsInt = 0;
 int prevCharsInt = 0;

@@ -10,7 +10,9 @@ RTC_DATA_ATTR int bootCount = 0;
 // Enter your Wifi Info
 const char* ssid     = "NPRDC CELCOM M2";
 const char* password = "nprdc1234";
-
+/* https://maps.googleapis.com/maps/api/geocode/json?latlng=1.449183,110.448915
+&location_type=ROOFTOP&result_type=street_address&key=AIzaSyD5Veclfg27JklUnd_6jD5OtktCfmQg8Gc
+*/
 const char* host = "https://maps.googleapis.com"; 
 
 // Char arrays to hold final values for request
@@ -214,9 +216,6 @@ void loop() {
     // to google maps API and making a GET Request
     ///////////////////////////////////////////////
 
-    /*
-    https://maps.googleapis.com/maps/api/geocode/json?latlng=1.4491,110.4490&key=AIzaSyBn9oZIwFaL3hpwu4nr1FhCYEomRI1kzFE
-    */
     //Check to see if Receiver is to be trusted before making request
     if (veribuff[0] == 'A') {
       // WiFiClientSecure client;
@@ -236,9 +235,14 @@ void loop() {
       // String urlKey, just below is where you add your API key 
       // Note the "&key= " at the beginning.
 
+        /* https://maps.googleapis.com/maps/api/geocode/json?latlng=1.449183,110.448915
+&location_type=ROOFTOP&result_type=street_address&key=AIzaSyD5Veclfg27JklUnd_6jD5OtktCfmQg8Gc
+        https://maps.googleapis.com/maps/api/geocode/json?latlng=1.449183,110.448915&key=AIzaSyD5Veclfg27JklUnd_6jD5OtktCfmQg8Gc
+*/
+
       //Building the GET request
       String urlPiece = "/maps/api/geocode/json?latlng=";
-      String urlKey = "&key=AIzaSyBn9oZIwFaL3hpwu4nr1FhCYEomRI1kzFE";
+      String urlKey = "&key=AIzaSyD5Veclfg27JklUnd_6jD5OtktCfmQg8Gc";
       String url = urlPiece + LAT + ',' + LONG + urlKey;
 
       Serial.print("\nSending Request.");
@@ -252,7 +256,7 @@ void loop() {
       unsigned long timeout = millis();
 
       while (client.available() == 0) {
-        if (millis() - timeout > 5000) {
+        if (millis() - timeout > 10000) {
           Serial.println("Error: Client Timeout !!!");
           client.stop();
           return;

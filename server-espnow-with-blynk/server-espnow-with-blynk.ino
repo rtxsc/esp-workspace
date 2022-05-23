@@ -3,7 +3,7 @@
 
 #define BLYNK_TEMPLATE_ID "TMPLLcUZS8pw"
 
-#define AFS2 // options: AFS/AFS2
+#define AFS // options: AFS/AFS2
 
 #ifdef AFS
   #define BLYNK_DEVICE_NAME "AFS"
@@ -96,7 +96,7 @@ String restart_ts = "None";
 
 // Replace with your network credentials (STATION)
 char auth[] = BLYNK_AUTH_TOKEN;
-const char* ssid = "NPRDC CELCOM M3";
+const char* ssid = "NPRDC CELCOM M2";
 const char* pass = "nprdc1234";
 const char* remote_host = "blynk.cloud";
 
@@ -116,6 +116,13 @@ float humi2 = 0;
 int random2 = 0;
 int read_id2 = 0;
 
+String jsonString3 = "None";
+String dt3 = "None";
+float temp3 = 0;
+float humi3 = 0;
+int random3 = 0;
+int read_id3 = 0;
+
 float shuntvoltage;
 float busvoltage;
 float current_mA; 
@@ -123,6 +130,7 @@ float current_mA;
 unsigned long previousMillis = 0;   // Stores last time temperature was published
 unsigned int interval = 60000;      // very long delay just to free up more CPU time
 bool esp_now_initialized = false;
+int display_menu = 0;
 
 // MAC Address of the receiver #1 => 9c:9c:1f:c5:94:24 (ESP01-client-1)
 uint8_t client1_mac[] = {0x9C, 0x9C, 0x1F, 0xC5, 0x94, 0x24};
@@ -133,6 +141,11 @@ const char* client1_cchar = client1_mac_string.c_str();
 uint8_t client2_mac[] = {0x9C, 0x9C, 0x1F, 0xE3, 0x85, 0x3C};
 String client2_mac_string = "9c:9c:1f:e3:85:3c";
 const char* client2_cchar = client2_mac_string.c_str();
+
+// MAC Address of the receiver #3 DC:4F:22:18:EA:45 (ESP8266 Client - 29.04.2022)
+uint8_t client3_mac[] = {0xDC, 0x4F, 0x22, 0x18, 0xEA, 0x45};
+String client3_mac_string = "DC:4F:22:18:EA:45";
+const char* client3_cchar = client3_mac_string.c_str();
 
 // Structure example to receive data
 // Must match the sender structure
@@ -233,11 +246,33 @@ void getINA219(){
 }
 
 void blynk_tasks(){
+  display_menu++;
   lcd.clear();
   String dateTime = get_timestamp();
-  display_uptime_top_row();
-  lcd.setCursor(0,1);
-  lcd.print(dateTime);
+
+  if(display_menu == 1){
+      display_uptime_top_row();
+      lcd.setCursor(0,1);
+      lcd.print(dateTime);
+   }
+   else if(display_menu == 2)
+   {
+    lcd.clear();
+    lcd.setCursor(0, 0); // row 0, column 0
+    lcd.print("ReadID1:"+ String(read_id1));
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print("ReadID2:"+ String(read_id2));
+  }
+  else{
+    lcd.clear();
+    lcd.setCursor(0, 0); // row 0, column 0
+    lcd.print("V:"+ String(busvoltage,2) + "V C:"+ String(current_mA,2)+"mA");
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print("ReadID3:"+ String(read_id3));
+  }
+
+  if(display_menu>3) display_menu = 0;
+  
   Blynk.virtualWrite(V10,uptime_formatter::getUptime());
   Blynk.virtualWrite(V11, dateTime);
   Blynk.virtualWrite(V13,jsonString1 + " | Received at: " + dt1);
@@ -251,7 +286,9 @@ void blynk_tasks(){
   Blynk.virtualWrite(V25,humi2);
   Blynk.virtualWrite(V26,read_id2);
   Blynk.virtualWrite(V27,random2);
-  
+
+  Blynk.virtualWrite(V50,jsonString3 + " | Received at: " + dt3);
+
   Blynk.virtualWrite(V40,busvoltage);
   Blynk.virtualWrite(V41,shuntvoltage);
   Blynk.virtualWrite(V42,current_mA);
@@ -369,6 +406,8 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
   // Serial.println(macStr);
   if(strcmp(macStr, client1_cchar) == 0) Serial.println("Client ID 1");
   else if(strcmp(macStr, client2_cchar) == 0) Serial.println("Client ID 2");
+  else if(strcmp(macStr, client3_cchar) == 0) Serial.println("Client ID 3");
+
   else Serial.print(".");
 
   memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
@@ -395,6 +434,14 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     read_id2 = incomingReadings.readingId;
     dt2 = get_timestamp();
     jsonString2 = JSON.stringify(board);
+  }
+  else if(incomingReadings.id == 3){
+    temp3 = incomingReadings.temp;
+    humi3 = incomingReadings.humi;
+    random3 = incomingReadings.randomNum;
+    read_id3 = incomingReadings.readingId;
+    dt3 = get_timestamp();
+    jsonString3 = JSON.stringify(board);
   }
   else{
     Serial.println("No payload received");
@@ -683,4 +730,3 @@ void setup() {
 void loop() {
   // do not run Blynk here! ESP can't manage it well
 }
-

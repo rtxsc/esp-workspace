@@ -62,9 +62,13 @@ RTC_DATA_ATTR int bootCount = 0;
   int sat_count=0;
 #else
   // kuching airport coordinate
+  /* https://maps.googleapis.com/maps/api/geocode/json?latlng=1.449183,110.448915
+&location_type=ROOFTOP&result_type=street_address&key=AIzaSyD5Veclfg27JklUnd_6jD5OtktCfmQg8Gc
+
+*/
   float t = 0.0;
-  double lat                    = 1.4870;
-  double lon                    = 110.3416;
+  double lat                    = 1.4870; // UiTM 1.449183, 110.448915
+  double lon                    = 110.3416; // UiTM 110.448915
   float randomLat = 0.0, randomLon = 0.0;
 
 #endif
