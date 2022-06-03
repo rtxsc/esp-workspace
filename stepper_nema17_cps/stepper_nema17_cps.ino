@@ -72,9 +72,9 @@ void setup() {
  }
  void loop() {
 
-    int distance = distanceSensor.measureDistanceCm();
+    int distanceToObject = distanceSensor.measureDistanceCm();
     Serial.print("float dist:");
-    Serial.println(distance);
+    Serial.println(distanceToObject);
 
     // display.clearDisplay();
     // display.setTextSize(2);             // Normal 1:1 pixel scale
@@ -115,9 +115,15 @@ void setup() {
 
   #elif defined INPUT_CONTROL
 
+    if(millis() % 2 == 0){
       byte here[4] = {_h, _e, _r, _e};
       disp.point(0);   // выкл/выкл точки
       disp.twistByte(here, 25);
+    }
+    else{
+      disp.displayInt(distanceToObject);
+    }
+  
 
     while (Serial.available() > 0) {
         Serial.println(":::Manual Input Controlled Linear Stepper:::");
