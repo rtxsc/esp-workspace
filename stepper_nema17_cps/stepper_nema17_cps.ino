@@ -1,15 +1,30 @@
 #include "GyverTM1637.h" // for BIG VERSION
+#include <HCSR04.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_MLX90614.h>
+
+#define SCREEN_WIDTH 128 
+#define SCREEN_HEIGHT 64 
+#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #define CLK Y_STEP
 #define DIO Z_STEP
+
 #include "cnc_shield_uno.h"
 #include <Encoder.h>
 #define DELAY_MICROSEC 500
 //#define ENCODER_CONTROL
 #define INPUT_CONTROL
 int height_cm = 0; // for incoming serial data
+byte height_sense[4];
+int distanceInt;
 
-GyverTM1637 disp(CLK, DIO);
+GyverTM1637               disp(CLK, DIO);
+UltraSonicDistanceSensor  distanceSensor(Y_DIR, Z_DIR);  // Initialize sensor that uses digital pins 13 and 12.
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
 
 // Stepper Motor X
 Encoder myEnc(SpnEn, SpnDir);
@@ -18,9 +33,24 @@ const int dirPin = X_DIR; // X.DIR
 long oldPosition  = -999;
 int x;
 
+double new_emissivity = 0.68;
+
 void setup() {
-  // Sets the two pins as Outputs
+
   Serial.begin(115200);
+   mlx.begin(); 
+  // read current emissivity
+  Serial.print("Current emissivity = "); Serial.println(mlx.readEmissivity());
+
+  // set new emissivity
+  Serial.print("Setting emissivity = "); Serial.println(new_emissivity);
+  mlx.writeEmissivity(new_emissivity); // this does the 0x0000 erase write
+
+  // read back
+  Serial.print("New emissivity = "); Serial.println(mlx.readEmissivity());  // if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x64
+  //   Serial.println(F("SSD1306 allocation failed"));
+  //   for(;;); // Don't proceed, loop forever
+  // }
   pinMode(stepPin,OUTPUT); 
   pinMode(dirPin,OUTPUT);
   Serial.print("DELAY_MICROSECOND:");
@@ -37,8 +67,23 @@ void setup() {
   randomSeed(analogRead(Abort));
 
 
+
+
  }
  void loop() {
+
+    int distance = distanceSensor.measureDistanceCm();
+    Serial.print("float dist:");
+    Serial.println(distance);
+
+    // display.clearDisplay();
+    // display.setTextSize(2);             // Normal 1:1 pixel scale
+    // display.setTextColor(SSD1306_WHITE);        // Draw white text
+    // display.setCursor(0,0);             // Start at top-left corner
+    // display.print("distance:");
+    // display.setCursor(0,16);             // Start at top-left corner
+    // display.println(distance);
+    // display.display();
 
   #ifdef ENCODER_CONTROL
   Serial.println(":::Encoder Controlled Linear Stepper:::");
@@ -70,9 +115,9 @@ void setup() {
 
   #elif defined INPUT_CONTROL
 
-    byte here[4] = {_h, _e, _r, _e};
-    disp.point(0);   // выкл/выкл точки
-    disp.twistByte(here, 25);
+      byte here[4] = {_h, _e, _r, _e};
+      disp.point(0);   // выкл/выкл точки
+      disp.twistByte(here, 25);
 
     while (Serial.available() > 0) {
         Serial.println(":::Manual Input Controlled Linear Stepper:::");
@@ -121,8 +166,13 @@ void setup() {
     }
     disp.clear();
     Serial.println("\t:::::::::::Scanning temp:::::::::::");
+
+    int head_temp = mlx.readObjectTempC();
+    Serial.print("forehead temp:");
+    Serial.println(head_temp);
+
     byte tempc[4];
-    int tempc_int = random(3500,4000);
+    int tempc_int = head_temp*100; // random(3500,4000);
     for (int i = 3 ; i >= 0 ; i--)
     {
       tempc[i] = tempc_int % 10;
