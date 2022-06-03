@@ -73,8 +73,8 @@ void setup() {
  void loop() {
 
     int distanceToObject = distanceSensor.measureDistanceCm();
-    Serial.print("float dist:");
-    Serial.println(distanceToObject);
+    // Serial.print("float dist:");
+    // Serial.println(distanceToObject);
 
     // display.clearDisplay();
     // display.setTextSize(2);             // Normal 1:1 pixel scale
