@@ -6,6 +6,7 @@
 #define X_DIR       5
 #define Y_DIR       6
 #define Z_DIR       7
+#define NC          8
 
 #define X_POS_NEG   9
 #define Y_POS_NEG   10
@@ -20,3 +21,6 @@
 #define CoolEn      A3
 #define SDA         A4
 #define SCL         A5
+
+#define BOTTOM_POS  0
+#define TOP_POS     3090
