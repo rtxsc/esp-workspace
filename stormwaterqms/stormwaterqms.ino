@@ -1,23 +1,76 @@
 #define BLYNK_PRINT Serial // Defines the object that is used for printing
 // #define BLYNK_DEBUG        // Optional, this enables more detailed prints
-#define QMS_NODE2 // QMS_NODE1 or QMS_NODE2
+#define QMS_NODE1 // QMS_NODE1 or QMS_NODE2
 #define SECURE_CONN
 
 #ifdef QMS_NODE1
   #define BLYNK_TEMPLATE_ID "TMPLLpuw4V7u"
   #define BLYNK_DEVICE_NAME "Stormwater QMS Template"
   #define BLYNK_AUTH_TOKEN "0lTHr8-8wkZzqMklavhHXRf7tb85sOW4"
+  String NODE_NUMBER = "SWF1" ;
+  #define SUCCESS                 1
+  #define UNSUCCESSFUL            0
+
+  #define ISDestURL "insecure-groker.initialstate.com" // https can't be handled by the ESP8266, thus "insecure"
+  #define bucketKey "Q6FRDKMYYS5D" // Bucket key (hidden reference to your bucket that allows appending):
+  #define bucketName "INTEX SStorQMS Database" // Bucket name (name your data will be associated with in Initial State):
+  #define accessKey "ist_jXh1F13mOQDwsBRQdcMHjvvlAVyLbTRi" // Access key (the one you find in your account settings):
 #else
   #define BLYNK_TEMPLATE_ID "TMPLLpuw4V7u"
   #define BLYNK_DEVICE_NAME "Stormwater QMS Node 2"
   #define BLYNK_AUTH_TOKEN "E0TpRRx2qjxoNkeJVg3EfmD-82xoaLDr"
+  String NODE_NUMBER = "SWF2" ;
 #endif
+
+////////////////////////////
+// Initial State Emoji    //
+////////////////////////////
+String tiltemoji             = ":o:";
+String vibrateemoji          = ":o:";
+String tempCemoji             = ":thermometer:";
+String CO2emoji               = ":mask:";
+String luminosemoji           = ":sunny:";
+String chargingRateEmoji      = ":zap:";
+String battEmoji              = ":battery:";
+const char* signalRc          = "RestartCounter_";
+const char* signalnW          = "NoWiFiAP_";
+const char* signalcF          = "ConnectFailed_";
+
+float phValue;
+String _ph_status             = "NULL";
+String water_use_case         = "NULL";
+
+String signalName[] = { 
+                          "pHvalue_",
+                          "stateOfpH_",
+                          "SystemVoltage_",
+                          "SolarCurrent_",
+                          "Uptime_",
+                          "TimeNow_",
+                          "TSSntu_",
+                          "TSSmgl_",
+                          "Class_",
+                          "Coordinate_",
+                          "RestartCounter_",
+                          "FormattedAddress_",
+                          "WaterUseCase_",
+                          "AllPayload_"
+
+                          };
+
+const byte payloadSize = sizeof(signalName)/sizeof(signalName[0]);
+String signalData[payloadSize];
+bool payload_pushed = false;
+long payload_push_interval;
+int IS_PUSH_INTERVAL = 3600000; // default to 1 second
 
 #ifdef SECURE_CONN
   #include <WiFiClientSecure.h>
   #include <ArduinoJson.h>
   
   WiFiClientSecure client; // 23.05.2022 Monday
+  WiFiClient       clientIS;
+
   const char*  server = "https://maps.googleapis.com";  // Server URL
   const int httpPort = 443;
   String urlPiece = "/maps/api/geocode/json?latlng=";
@@ -104,6 +157,7 @@ byte                          i = 0; // CHAINABLE LED ARRAY
 TaskHandle_t Task1; // GPS HANDLER
 TaskHandle_t Task2; // BLYNK
 String classTSS                   = "None";
+bool deep_sleep_activated = false;
 
  byte degree_symbol[8] = {
     0b00110,
@@ -247,21 +301,24 @@ String get_timestamp(){
   dayStamp = formattedDate.substring(0, splitT);
   String dateTime = timeClient.getFormattedTime() + " " + dayStamp;
 
-   if(currentHour == 17 && currentMin >= 00){
-    Serial.println("Going to sleep now. Pushing Deep Sleep Timestamp");
-    Blynk.virtualWrite(V14, "Deep Sleep at "+ dateTime);
-    Serial.flush(); 
-    lcd.clear();
-    lcd.setCursor(0, 0); // row 0, column 0
-    lcd.print("Enter Deep Sleep");
-    lcd.setCursor(0, 1); // row 0, column 0
-    lcd.print(dateTime);
-    delay(1000);
-    digitalWrite(lcd_backlight,LOW); // force off backlight
-    leds.setColorRGB(i, 0, 0, 0); // turn off RGB
-    delay(1000);
-    esp_deep_sleep_start();
+  if(deep_sleep_activated){
+    if(currentHour == 17 && currentMin >= 00){
+      Serial.println("Going to sleep now. Pushing Deep Sleep Timestamp");
+      Blynk.virtualWrite(V14, "Deep Sleep at "+ dateTime);
+      Serial.flush(); 
+      lcd.clear();
+      lcd.setCursor(0, 0); // row 0, column 0
+      lcd.print("Enter Deep Sleep");
+      lcd.setCursor(0, 1); // row 0, column 0
+      lcd.print(dateTime);
+      delay(1000);
+      digitalWrite(lcd_backlight,LOW); // force off backlight
+      leds.setColorRGB(i, 0, 0, 0); // turn off RGB
+      delay(1000);
+      esp_deep_sleep_start();
+    }
   }
+
   return dateTime;
 }
 
@@ -303,7 +360,18 @@ float getPH(){
     // phValue = ph.readPH(voltage,fluidTemp);  // convert voltage to pH with temperature compensation
     float slope = (7.0-4.0)/((CALIBRATED_NEUTRAL_V - REFERENCE_1500mV)/3.0 - (CALIBRATED_ACID_V - REFERENCE_1500mV)/3.0);  // two point: (_neutralVoltage,7.0),(_acidVoltage,4.0)
     float intercept =  7.0 - slope*(CALIBRATED_NEUTRAL_V - REFERENCE_1500mV)/3.0;
-    float phValue = slope*(voltage-REFERENCE_1500mV)/3.0+intercept;
+    phValue = slope*(voltage-REFERENCE_1500mV)/3.0+intercept;
+
+      
+    if(phValue > 5 && phValue <= 9)
+      _ph_status = "Optimal pH";
+    else if(phValue > 9 && phValue <= 14)
+      _ph_status = "Too Alkaline";
+    else if(phValue < 0 && phValue <= 5)
+      _ph_status = "Too Acidic";
+    else
+      _ph_status = "Unreliable pH readout"; 
+
     setRGB_from_pH_reading(phValue); 
 
     return phValue;
@@ -358,7 +426,7 @@ String class3_use_f3  = "Fishery III - Common aquatic species / livestock drinki
 String class4_use     = "Irrigation";
 String class5_use     = "Hazardous Level! No use case!";
 float tss_mgl = 0;
-
+float tss_ntu = 0;
 void get_tss_ph(){
  
   float tssV = readChannel(ADS1115_COMP_0_GND); // TODO: coming from ADS1115
@@ -371,7 +439,7 @@ void get_tss_ph(){
   // if(tssV > 4.2) tssV = 4.200246; // 4.1+/-0.3 equal to NTU<0.5 in pure water
 
 
-  float tss_ntu = -1120.4*pow(mapped_v,2)+5742.3*mapped_v-4352.9; // formula from https://wiki.dfrobot.com/Turbidity_sensor_SKU__SEN0189
+  tss_ntu = -1120.4*pow(mapped_v,2)+5742.3*mapped_v-4352.9; // formula from https://wiki.dfrobot.com/Turbidity_sensor_SKU__SEN0189
   if(tss_ntu < 0.0) tss_ntu = 0.0;
   if(tss_ntu > 3000.0) tss_ntu = 3000.0; // max NTU readout by Dfrobot
 
@@ -382,6 +450,12 @@ void get_tss_ph(){
   else if(tss_mgl>=50 && tss_mgl<150)   classTSS = " [ CLASS III ] ";
   else if(tss_mgl>=150 && tss_mgl<300)  classTSS = " [ CLASS IV ] ";
   else                                  classTSS = " [ CLASS V ] ";
+
+  if(tss_mgl<25)                        water_use_case = class1_use_ws1+" "+class1_use_f1;
+  else if(tss_mgl>=25 && tss_mgl<50)    water_use_case = class2_use_ws2+" "+class2_use_f2;
+  else if(tss_mgl>=50 && tss_mgl<150)   water_use_case = class3_use_ws3+" "+class3_use_f3;
+  else if(tss_mgl>=150 && tss_mgl<300)  water_use_case = class4_use;
+  else                                  water_use_case = class5_use;
 
   if(tss_mgl<25){
     // classTSS = " [ CLASS I ] ";
@@ -469,6 +543,8 @@ float readChannel(ADS1115_MUX channel) {
 int display_menu = 0;
 
 void blynk_tasks(){
+  payload_pushed = false;
+
   display_menu++;
   lcd.clear();
   String dateTime = get_timestamp();
@@ -486,7 +562,7 @@ void blynk_tasks(){
     lcd.setCursor(0, 1); // row 1, column 0
     lcd.print(String(float(lon),4) + " C:"+ String(currentCharsInt));
   }
-  else{
+  else if(display_menu == 3){
     lcd.clear();
     lcd.setCursor(0, 0); // row 0, column 0
     lcd.print("V:"+ String(busvoltage,2) + "V C:"+ String(current_mA,2)+"mA");
@@ -494,8 +570,19 @@ void blynk_tasks(){
     lcd.print("pH:"+String(getPH(),2) + " TSS:"+ String(int(tss_mgl)));
     
   }
+  else{
+    lcd.clear();
+    lcd.setCursor(0, 0); // row 0, column 0
+    if(deep_sleep_activated)
+      lcd.print("Deep Sleep Active");
+    else
+      lcd.print("Deep Sleep Off");
 
-  if(display_menu>3) display_menu = 0;
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print(formatted_address);
+  }
+
+  if(display_menu>4) display_menu = 0;
 
   Blynk.virtualWrite(V10, uptime_formatter::getUptime());
   Blynk.virtualWrite(V11, dateTime);  
@@ -505,17 +592,131 @@ void blynk_tasks(){
   Blynk.virtualWrite(V40, busvoltage);
   Blynk.virtualWrite(V41, shuntvoltage);
   Blynk.virtualWrite(V42, current_mA);
+
+
+  /*
+          "pHvalue_",
+          "stateOfpH_",
+          "SystemVoltage_",
+          "SolarCurrent_",
+          "Uptime_",
+          "TimeNow_",
+          "TSSntu_",
+          "TSSmgl_",
+          "Class_",
+          "Coordinate_",
+          "RestartCounter_",
+          "FormattedAddress_",
+          "WaterUseCase_",
+          "AllPayload_"
+  */
+ 
+  byte payloadCount = 0;
+
+  signalData[payloadCount] = String(phValue);              
+  signalName[payloadCount] = "pHvalue_"+NODE_NUMBER;
+  payloadCount++;
+
+  signalData[payloadCount] = String(_ph_status);       
+  signalName[payloadCount] = "stateOfpH_"+NODE_NUMBER;
+  payloadCount++;
+
+  signalData[payloadCount] = String(busvoltage);       
+  signalName[payloadCount] = "SystemVoltage_"+NODE_NUMBER;
+  payloadCount++;
+
+  signalData[payloadCount] = String(current_mA);       
+  signalName[payloadCount] = "SolarCurrent_"+NODE_NUMBER;
+  payloadCount++;
+
+  signalData[payloadCount] = String(uptime_formatter::getUptime()); 
+  signalName[payloadCount] = "Uptime_"+NODE_NUMBER;
+  payloadCount++;
+  
+  signalData[payloadCount] = dateTime; 
+  signalName[payloadCount] = "TimeNow_"+NODE_NUMBER;
+  payloadCount++;
+
+  signalData[payloadCount] = String(tss_ntu);              
+  signalName[payloadCount] = "TSSntu_"+NODE_NUMBER;
+  payloadCount++;
+
+
+  signalData[payloadCount] = String(tss_mgl);              
+  signalName[payloadCount] = "TSSmgl_"+NODE_NUMBER;
+  payloadCount++;
+
+  signalData[payloadCount] = classTSS;              
+  signalName[payloadCount] = "Class_"+NODE_NUMBER;
+  payloadCount++;
+
+  signalData[payloadCount] = String(lat,4)+","+String(lon,4);  // final payloadCount here
+  signalName[payloadCount] = "Coordinate_"+NODE_NUMBER;
+  payloadCount++;
+
+  signalData[payloadCount] = String(restartCounter);   
+  signalName[payloadCount] = "RestartCounter_"+NODE_NUMBER;
+  payloadCount++;
+
+  signalData[payloadCount] = String(formatted_address);   
+  signalName[payloadCount] = "FormattedAddress_"+NODE_NUMBER;
+  payloadCount++;
+
+  signalData[payloadCount] = String(water_use_case);   
+  signalName[payloadCount] = "WaterUseCase_"+NODE_NUMBER;
+  payloadCount++;
+
+  String all_payload =  String(phValue) +","+ \
+                        String(tss_ntu) +","+ \
+                        String(tss_mgl) +","+ \
+                        String(classTSS);
+
+  signalData[payloadCount] = String(all_payload);   
+  signalName[payloadCount] = "AllPayload_"+NODE_NUMBER;
+  payloadCount++;
+
+  while(!payload_pushed && millis() - payload_push_interval > IS_PUSH_INTERVAL){
+
+    for(int i=0; i < payloadCount ; i++){
+      Serial.print("Configuring signalName ["); Serial.print(i); Serial.print("] "); 
+      Serial.print(signalName[i]);
+      Serial.print(" with latest data of "); Serial.println(signalData[i]);
+    }
+   
+    Serial.print("\n\nPushing static data at every ");
+    Serial.println(IS_PUSH_INTERVAL);
+  
+    static_postData();
+    payload_push_interval = millis();
+    Serial.println("Pushing static data DONE");
+
+  }
+
 }
 
 BLYNK_CONNECTED() {
   timeClient.setTimeOffset(28800);
   restart_ts = get_timestamp();
-  Blynk.syncVirtual(V0, V1, V2, V3, V6, V9);
+  Blynk.syncVirtual(V0, V1, V2, V3, V4, V5, V6, V9);
   Blynk.virtualWrite(V12,WiFi.localIP().toString());
   Blynk.virtualWrite(V13,ssid);
   Blynk.virtualWrite(V16, restart_ts); 
   Blynk.virtualWrite(V15,restartCounter);
   Blynk.virtualWrite(V14, "Woken up at "+ restart_ts);
+}
+// toggle DEEP SLEEP
+
+BLYNK_WRITE(V0){
+  int second = param.asInt(); // second = 1 until 3600
+  IS_PUSH_INTERVAL = second * 1000 ; 
+  Blynk.virtualWrite(V26,(IS_PUSH_INTERVAL)/1000);
+
+}
+
+BLYNK_WRITE(V1){
+  int pinValue = param.asInt();
+  if(pinValue)  deep_sleep_activated = true;
+  else          deep_sleep_activated = false;
 }
 
 BLYNK_WRITE(V2){
@@ -536,16 +737,21 @@ BLYNK_WRITE(V2){
     }
     if(pinValue == 3){
       // darul hana bridge
-      lat = 1.5613590617188766;
-      lon = 110.3459666550215;
-      dummy_address_selection = "Darul Hana Bridge";
+      //  1.5434616155899992, 110.6110073683838 Asajaya Fire and Rescue Station
+      lat = 1.543461615589999;
+      lon = 110.6110073683838;
+      dummy_address_selection = "Asajaya Fire and Rescue Station";
 
     }
      if(pinValue == 4){
       // satok bridge  // 1.5551582481994255, 110.32391190055193
-      lat = 1.5551582481994255;
-      lon = 110.32391190055193;
-      dummy_address_selection = "Satok Suspension Bridge";
+      // pullman 1.556157505183797, 110.3510334597777
+      // 1.5561348454213677, 110.35104314403048
+      // 1.555651091416008, 110.35104632965545 the hills
+      // 1.5552385188911275, 110.35134820559536 K11
+      lat = 1.5552385188911275;
+      lon = 110.35134820559536;
+      dummy_address_selection = "Pullman Hotel";
 
     }
   }
@@ -822,6 +1028,8 @@ void setup() {
   // Initialize Serial Monitor
   Serial.begin(115200);
   delay(1000);
+  for(int i=0; i < payloadSize ; i++) signalName[i] = signalName[i]+NODE_NUMBER;
+
   #ifdef SECURE_CONN
   client.setInsecure(); // dedicated for Google Maps API 
   #endif
@@ -912,8 +1120,92 @@ void setup() {
       CORE_1);                  /* pin task to core 1 */     
   delay(500); 
 
+  if(!postBucket()){};
+
 }
 
 void loop() {
   // do not run Blynk here! ESP can't manage it well
 }
+
+
+// this method makes a HTTP connection to the server and creates a bucket is it does not exist:
+bool postBucket() {
+// close any connection before send a new request.
+// This will free the socket on the WiFi shield
+clientIS.stop();
+
+// if there's a successful connection:
+if (clientIS.connect(ISDestURL, 80) == SUCCESS) {
+ Serial.println("connecting...");
+  // send the HTTP PUT request:
+  // Build HTTP request.
+  String toSend = "POST /api/buckets HTTP/1.1\r\n";
+  toSend += "Host:";
+  toSend += ISDestURL;
+  toSend += "\r\n" ;
+  toSend += "User-Agent:Arduino\r\n";
+  toSend += "Accept-Version: ~0\r\n";
+  toSend += "X-IS-AccessKey: " accessKey "\r\n";
+  toSend += "Content-Type: application/json\r\n";
+  String payload = "{\"bucketKey\": \"" bucketKey "\",";
+  payload += "\"bucketName\": \"" bucketName "\"}";
+  payload += "\r\n";
+  toSend += "Content-Length: "+String(payload.length())+"\r\n";
+  toSend += "\r\n";
+  toSend += payload;
+
+  clientIS.println(toSend);
+  // Serial.println(toSend);
+  return true;
+} else {
+  // if you couldn't make a connection:
+  clientIS.stop();
+  lcd.clear();
+  lcd.setCursor(0, 0); // row 1, column 0
+  lcd.print("CONNECTION FAILD");
+  lcd.setCursor(0, 1); // row 1, column 0
+  lcd.print("NO INTERNET ACCS");
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  lcd.clear();
+  return false;
+  }
+}
+
+
+void static_postData() {
+  // close any connection before send a new request.
+  // This will free the socket on the WiFi shield
+  clientIS.stop();
+  // if there's a successful connection:
+  Serial.println("[static_postData] clientIS stopped and contacting ISDestURL ...");
+
+  if (clientIS.connect(ISDestURL, 80) == SUCCESS) {
+   Serial.println("[static_postData] connection to ISDestURL successful...");
+    // send the HTTP PUT request:
+    // Build HTTP request.
+
+    for (int i=0; i<payloadSize; i++){
+      String toSend = "POST /api/events HTTP/1.1\r\n";
+      toSend += "Host:";
+      toSend += ISDestURL;
+      toSend += "\r\n" ;
+      toSend += "Content-Type: application/json\r\n";
+      toSend += "User-Agent: Arduino\r\n";
+      toSend += "Accept-Version: ~0\r\n";
+      toSend += "X-IS-AccessKey: " accessKey "\r\n";
+      toSend += "X-IS-BucketKey: " bucketKey "\r\n";
+
+      String payload = "[{\"key\": \"" + signalName[i] + "\", ";
+      payload +="\"value\": \"" + signalData[i] + "\"}]\r\n";
+
+      toSend += "Content-Length: "+String(payload.length())+"\r\n";
+      toSend += "\r\n";
+      toSend += payload;
+      // Serial.println(payload);
+      // Serial.println(toSend);
+      clientIS.println(toSend);
+    }
+    payload_pushed = true;
+  }
+} 
