@@ -1,6 +1,6 @@
 #define BLYNK_PRINT Serial // Defines the object that is used for printing
 // #define BLYNK_DEBUG        // Optional, this enables more detailed prints
-#define QMS_NODE1 // QMS_NODE1 or QMS_NODE2
+#define QMS_NODE2 // QMS_NODE1 or QMS_NODE2
 #define SECURE_CONN
 
 #ifdef QMS_NODE1
@@ -8,19 +8,20 @@
   #define BLYNK_DEVICE_NAME "Stormwater QMS Template"
   #define BLYNK_AUTH_TOKEN "0lTHr8-8wkZzqMklavhHXRf7tb85sOW4"
   String NODE_NUMBER = "SWF1" ;
-  #define SUCCESS                 1
-  #define UNSUCCESSFUL            0
-
-  #define ISDestURL "insecure-groker.initialstate.com" // https can't be handled by the ESP8266, thus "insecure"
-  #define bucketKey "Q6FRDKMYYS5D" // Bucket key (hidden reference to your bucket that allows appending):
-  #define bucketName "INTEX SStorQMS Database" // Bucket name (name your data will be associated with in Initial State):
-  #define accessKey "ist_jXh1F13mOQDwsBRQdcMHjvvlAVyLbTRi" // Access key (the one you find in your account settings):
 #else
   #define BLYNK_TEMPLATE_ID "TMPLLpuw4V7u"
   #define BLYNK_DEVICE_NAME "Stormwater QMS Node 2"
   #define BLYNK_AUTH_TOKEN "E0TpRRx2qjxoNkeJVg3EfmD-82xoaLDr"
   String NODE_NUMBER = "SWF2" ;
 #endif
+
+#define SUCCESS                 1
+#define UNSUCCESSFUL            0
+
+#define ISDestURL "insecure-groker.initialstate.com" // https can't be handled by the ESP8266, thus "insecure"
+#define bucketKey "Q6FRDKMYYS5D" // Bucket key (hidden reference to your bucket that allows appending):
+#define bucketName "INTEX SStorQMS Database" // Bucket name (name your data will be associated with in Initial State):
+#define accessKey "ist_jXh1F13mOQDwsBRQdcMHjvvlAVyLbTRi" // Access key (the one you find in your account settings):
 
 ////////////////////////////
 // Initial State Emoji    //
@@ -62,14 +63,14 @@ const byte payloadSize = sizeof(signalName)/sizeof(signalName[0]);
 String signalData[payloadSize];
 bool payload_pushed = false;
 long payload_push_interval;
-int IS_PUSH_INTERVAL = 3600000; // default to 1 second
+int IS_PUSH_INTERVAL = 3600000; // default to 1 hour
 
 #ifdef SECURE_CONN
   #include <WiFiClientSecure.h>
   #include <ArduinoJson.h>
   
   WiFiClientSecure client; // 23.05.2022 Monday
-  WiFiClient       clientIS;
+  WiFiClient       clientIS; // 13.06.2022 Monday (with teammate)
 
   const char*  server = "https://maps.googleapis.com";  // Server URL
   const int httpPort = 443;
