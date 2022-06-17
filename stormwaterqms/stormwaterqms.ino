@@ -113,7 +113,6 @@ int IS_PUSH_INTERVAL = 3600000; // default to 1 hour
 
 RTC_DATA_ATTR int bootCount = 0;
 
-
 #define GPS_AVAILABLE // might contribute to cache region access error (not sure yet 3:15AM 20.3.2021)
 
 #ifdef GPS_AVAILABLE
@@ -159,6 +158,7 @@ TaskHandle_t Task1; // GPS HANDLER
 TaskHandle_t Task2; // BLYNK
 String classTSS                   = "None";
 bool deep_sleep_activated = false;
+float pHvalue = 0.0;
 
  byte degree_symbol[8] = {
     0b00110,
@@ -356,14 +356,13 @@ void read_ads1115(){
 #define CALIBRATED_ACID_V 2032.44
 
 float getPH(){
-    float voltage = readChannel(ADS1115_COMP_1_GND)*1000; // TODO: coming from ADS1115   
+    float voltage = readChannelAverage(ADS1115_COMP_1_GND)*1000; 
     // voltage = voltage - offsetVph; // disable this line if supply to pH sensor is 5.0V exact
     // phValue = ph.readPH(voltage,fluidTemp);  // convert voltage to pH with temperature compensation
     float slope = (7.0-4.0)/((CALIBRATED_NEUTRAL_V - REFERENCE_1500mV)/3.0 - (CALIBRATED_ACID_V - REFERENCE_1500mV)/3.0);  // two point: (_neutralVoltage,7.0),(_acidVoltage,4.0)
     float intercept =  7.0 - slope*(CALIBRATED_NEUTRAL_V - REFERENCE_1500mV)/3.0;
     phValue = slope*(voltage-REFERENCE_1500mV)/3.0+intercept;
 
-      
     if(phValue > 5 && phValue <= 9)
       _ph_status = "Optimal pH";
     else if(phValue > 9 && phValue <= 14)
@@ -428,17 +427,17 @@ String class4_use     = "Irrigation";
 String class5_use     = "Hazardous Level! No use case!";
 float tss_mgl = 0;
 float tss_ntu = 0;
+
 void get_tss_ph(){
  
-  float tssV = readChannel(ADS1115_COMP_0_GND); // TODO: coming from ADS1115
-
+  float tssV = readChannelAverage(ADS1115_COMP_0_GND); // TODO: coming from ADS1115
+  pHvalue = getPH(); // readChannelAverage(ADS1115_COMP_1_GND);
   if (tssV > prevMax1) prevMax1 = tssV;
-  float mapped_v = _map(tssV, 0.0, prevMax1, 2.5, 4.2); // map to 3.3V to 5V 
+  float mapped_v = _map(tssV, 0.0, prevMax1, 2.5, 4.2); // map to 3.3V to 4.2V 
 
   // no need to filter tssV as we are using auto-mapped value 14.04.2022
   // if(tssV < 2.5) tssV = 2.50;
   // if(tssV > 4.2) tssV = 4.200246; // 4.1+/-0.3 equal to NTU<0.5 in pure water
-
 
   tss_ntu = -1120.4*pow(mapped_v,2)+5742.3*mapped_v-4352.9; // formula from https://wiki.dfrobot.com/Turbidity_sensor_SKU__SEN0189
   if(tss_ntu < 0.0) tss_ntu = 0.0;
@@ -491,62 +490,62 @@ void get_tss_ph(){
   // Serial.print("\ttss_NTU:");   Serial.print(tss_ntu);
   // Serial.print("\ttss_mg/L:");  Serial.print(tss_mgl);
   // Serial.print("\tClass:");     Serial.println(classTSS);
+
   Blynk.virtualWrite(V20, tss_ntu);
   Blynk.virtualWrite(V21, tss_mgl);
   Blynk.virtualWrite(V22, classTSS);
-  Blynk.virtualWrite(V23, getPH());
+  Blynk.virtualWrite(V23, pHvalue);
 
   }
 
-const int numReadings = 5;
+const int numReadings = 10;
 float readings[numReadings];      // the readings from the analog input
 int readIndex = 0;              // the index of the current reading
 float total = 0;                  // the running total
 float averageVoltage = 0;                // the average
+
 
 float readChannel(ADS1115_MUX channel) {
   float voltage = 0.0;
   adc.setCompareChannels(channel);
   adc.startSingleMeasurement();
   while(adc.isBusy()){}
+  voltage = adc.getResult_V(); // alternative: getResult_mV for Millivolt
+  return voltage;
+}
 
-    // voltage = adc.getResult_V(); // alternative: getResult_mV for Millivolt
-    // return voltage;
-
+float readChannelAverage(ADS1115_MUX channel) {
+  float voltage = 0.0;
+  while(adc.isBusy()){}
   while(readIndex < numReadings){
-    voltage = adc.getResult_V(); // alternative: getResult_mV for Millivolt
-
-    // averaging algorithm
-    // subtract the last reading:
+    adc.setCompareChannels(channel);  // keep on reading the channel
+    adc.startSingleMeasurement();     // keep on measuring
+    voltage = adc.getResult_V();      // alternative: getResult_mV for Millivolt
     total = total - readings[readIndex];
-    // read from the sensor:
     readings[readIndex] = voltage;
-    // add the reading to the total:
     total = total + readings[readIndex];
-    // advance to the next position in the array:
     readIndex = readIndex + 1;
-    // calculate the average:
     averageVoltage = total / numReadings;
-    // send it to the computer as ASCII digits
-    delay(15);        // delay in between reads for stability
-  }
-
-  // if we're at the end of the array...
-  if (readIndex >= numReadings) {
-    // ...wrap around to the beginning:
-    // Serial.printf("readIndex:%d \t averageVoltage:%f \n ",readIndex, averageVoltage);
-    readIndex = 0;
-    return averageVoltage;
+    if (readIndex >= numReadings) {
+      readIndex = 0;
+      return averageVoltage;
+    }
+    delay(10);        // delay in between reads for ADS stability
   }
   return voltage;
 }
 
-int display_menu = 0;
+byte display_menu = 0;
+byte display_select = 0;
 
 void blynk_tasks(){
   payload_pushed = false;
 
-  display_menu++;
+  if(display_select == 0)
+    display_menu++;
+  else{
+    display_menu = display_select;
+  }
   lcd.clear();
   String dateTime = get_timestamp();
   
@@ -568,22 +567,29 @@ void blynk_tasks(){
     lcd.setCursor(0, 0); // row 0, column 0
     lcd.print("V:"+ String(busvoltage,2) + "V C:"+ String(current_mA,2)+"mA");
     lcd.setCursor(0, 1); // row 1, column 0
-    lcd.print("pH:"+String(getPH(),2) + " TSS:"+ String(int(tss_mgl)));
+    lcd.print("pH:"+String(pHvalue,2) + " TSS:"+ String(int(tss_mgl)));
     
+  }
+  else if(display_menu == 4){
+    lcd.clear();
+    lcd.setCursor(0, 0); // row 0, column 0
+    lcd.print("NTU:"+ String(tss_ntu,3));
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print("TSS:"+ String(tss_mgl,3)+ " m/gl"); 
   }
   else{
     lcd.clear();
     lcd.setCursor(0, 0); // row 0, column 0
     if(deep_sleep_activated)
-      lcd.print("Deep Sleep Active");
+      lcd.print("DS-ON  Sat:");
     else
-      lcd.print("Deep Sleep Off");
-
+      lcd.print("DS-OFF Sat:");
+    lcd.print(sat_count);
     lcd.setCursor(0, 1); // row 1, column 0
     lcd.print(formatted_address);
   }
 
-  if(display_menu>4) display_menu = 0;
+  if(display_menu>5) display_menu = 0;
 
   Blynk.virtualWrite(V10, uptime_formatter::getUptime());
   Blynk.virtualWrite(V11, dateTime);  
@@ -678,11 +684,11 @@ void blynk_tasks(){
 
   while(!payload_pushed && millis() - payload_push_interval > IS_PUSH_INTERVAL){
 
-    for(int i=0; i < payloadCount ; i++){
-      Serial.print("Configuring signalName ["); Serial.print(i); Serial.print("] "); 
-      Serial.print(signalName[i]);
-      Serial.print(" with latest data of "); Serial.println(signalData[i]);
-    }
+    // for(int i=0; i < payloadCount ; i++){
+    //   Serial.print("Configuring signalName ["); Serial.print(i); Serial.print("] "); 
+    //   Serial.print(signalName[i]);
+    //   Serial.print(" with latest data of "); Serial.println(signalData[i]);
+    // }
    
     Serial.print("\n\nPushing static data at every ");
     Serial.println(IS_PUSH_INTERVAL);
@@ -808,6 +814,10 @@ BLYNK_WRITE(V6){
   else          powerSaving = false;
 }
 
+BLYNK_WRITE(V7){
+  display_select = param.asInt();
+}
+
 BLYNK_WRITE(V9){
   int pinValue = param.asInt();
   if(pinValue)  digitalWrite(lcd_backlight,HIGH);
@@ -842,9 +852,9 @@ void GPS_HandlerTask(void * pvParameters)
       if(prevCharsInt != currentCharsInt){
         prevCharsInt = currentCharsInt;
       }
-      else{
-        Serial.println(F("[MISSING SIGNAL] No GPS data received: check wiring"));
-      }
+      // else{
+      //   Serial.println(F("[MISSING SIGNAL] No GPS data received: check wiring"));
+      // }
 
       smartDelay(1000);
 
@@ -864,7 +874,7 @@ void BLYNK_HandlerTask(void * pvParameters)
     timer.setInterval(1000L, printTimeRTC);
   #else
     timer.setInterval(1000L, blynk_tasks);
-    timer.setInterval(5000L, read_ads1115);
+    // timer.setInterval(5000L, read_ads1115);
     timer.setInterval(5000L, getINA219);
     timer.setInterval(5000L, get_tss_ph);
   #endif
@@ -1074,7 +1084,7 @@ void setup() {
   lcd.setCursor(0,0);
   lcd.print("Connecting Blynk");
   lcd.setCursor(0,1);
-  lcd.print("blynk.cloud:80");
+  lcd.print(ssid);
 // to configure the begin timeout, edit the file at path above
   Blynk.begin(auth, ssid, pass);
   Serial.print("[BLYNK WiFi Handler Main Server Code] WiFi connected with IP ");  
