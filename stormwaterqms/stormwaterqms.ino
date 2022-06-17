@@ -21,6 +21,10 @@
 #define ISDestURL "insecure-groker.initialstate.com" // https can't be handled by the ESP8266, thus "insecure"
 #define bucketKey "Q6FRDKMYYS5D" // Bucket key (hidden reference to your bucket that allows appending):
 #define bucketName "INTEX SStorQMS Database" // Bucket name (name your data will be associated with in Initial State):
+
+#define bucketKey_csv "PYFT9TCK5JA5"
+#define bucketName_csv "SStormQMS CSV Database"
+
 #define accessKey "ist_jXh1F13mOQDwsBRQdcMHjvvlAVyLbTRi" // Access key (the one you find in your account settings):
 
 ////////////////////////////
@@ -59,8 +63,14 @@ String signalName[] = {
 
                           };
 
+String signalNameCSV[] = {"AllPayload_"};
+
 const byte payloadSize = sizeof(signalName)/sizeof(signalName[0]);
+const byte payloadSizeCSV = sizeof(signalNameCSV)/sizeof(signalNameCSV[0]);
+
 String signalData[payloadSize];
+String signalDataCSV[payloadSizeCSV];
+
 bool payload_pushed = false;
 long payload_push_interval;
 int IS_PUSH_INTERVAL = 3600000; // default to 1 hour
@@ -498,12 +508,11 @@ void get_tss_ph(){
 
   }
 
-const int numReadings = 10;
-float readings[numReadings];      // the readings from the analog input
+const int numReadings = 10;     // default to 10 readings for 10 milliseconds interval
+float readings[numReadings];    // the readings from the analog input
 int readIndex = 0;              // the index of the current reading
-float total = 0;                  // the running total
-float averageVoltage = 0;                // the average
-
+float total = 0;                // the running total
+float averageVoltage = 0;       // the average
 
 float readChannel(ADS1115_MUX channel) {
   float voltage = 0.0;
@@ -619,6 +628,7 @@ void blynk_tasks(){
   */
  
   byte payloadCount = 0;
+  byte payloadCountCSV = 0;
 
   signalData[payloadCount] = String(phValue);              
   signalName[payloadCount] = "pHvalue_"+NODE_NUMBER;
@@ -673,15 +683,21 @@ void blynk_tasks(){
   signalName[payloadCount] = "WaterUseCase_"+NODE_NUMBER;
   payloadCount++;
 
-  String all_payload =  String(phValue) +","+ \
-                        String(tss_ntu) +","+ \
-                        String(tss_mgl) +","+ \
-                        String(classTSS);
+  String all_payload =  String(phValue) +","          + \
+                        String(tss_ntu) +","          + \
+                        String(tss_mgl) +","          + \
+                        String(classTSS)+","          + \
+                        String(formatted_address)+"," + \
+                        String(lat,4)+","+String(lon,4);
+                        ;
 
   signalData[payloadCount] = String(all_payload);   
   signalName[payloadCount] = "AllPayload_"+NODE_NUMBER;
   payloadCount++;
 
+  signalDataCSV[payloadCountCSV] = String(all_payload);
+  signalNameCSV[payloadCountCSV] = "AllPayload_"+NODE_NUMBER;
+  
   while(!payload_pushed && millis() - payload_push_interval > IS_PUSH_INTERVAL){
 
     // for(int i=0; i < payloadCount ; i++){
@@ -694,6 +710,8 @@ void blynk_tasks(){
     Serial.println(IS_PUSH_INTERVAL);
   
     static_postData();
+    static_postData_csv();
+
     payload_push_interval = millis();
     Serial.println("Pushing static data DONE");
 
@@ -1132,6 +1150,7 @@ void setup() {
   delay(500); 
 
   if(!postBucket()){};
+  if(!postBucket_csv()){};
 
 }
 
@@ -1183,6 +1202,48 @@ if (clientIS.connect(ISDestURL, 80) == SUCCESS) {
   }
 }
 
+bool postBucket_csv() {
+// close any connection before send a new request.
+// This will free the socket on the WiFi shield
+clientIS.stop();
+
+// if there's a successful connection:
+if (clientIS.connect(ISDestURL, 80) == SUCCESS) {
+ Serial.println("connecting...");
+  // send the HTTP PUT request:
+  // Build HTTP request.
+  String toSend = "POST /api/buckets HTTP/1.1\r\n";
+  toSend += "Host:";
+  toSend += ISDestURL;
+  toSend += "\r\n" ;
+  toSend += "User-Agent:Arduino\r\n";
+  toSend += "Accept-Version: ~0\r\n";
+  toSend += "X-IS-AccessKey: " accessKey "\r\n";
+  toSend += "Content-Type: application/json\r\n";
+  String payload = "{\"bucketKey\": \"" bucketKey_csv "\",";
+  payload += "\"bucketName\": \"" bucketName_csv "\"}";
+  payload += "\r\n";
+  toSend += "Content-Length: "+String(payload.length())+"\r\n";
+  toSend += "\r\n";
+  toSend += payload;
+
+  clientIS.println(toSend);
+  // Serial.println(toSend);
+  return true;
+} else {
+  // if you couldn't make a connection:
+  clientIS.stop();
+  lcd.clear();
+  lcd.setCursor(0, 0); // row 1, column 0
+  lcd.print("CONNECTION FAILD");
+  lcd.setCursor(0, 1); // row 1, column 0
+  lcd.print("NO INTERNET ACCS");
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  lcd.clear();
+  return false;
+  }
+}
+
 
 void static_postData() {
   // close any connection before send a new request.
@@ -1209,6 +1270,44 @@ void static_postData() {
 
       String payload = "[{\"key\": \"" + signalName[i] + "\", ";
       payload +="\"value\": \"" + signalData[i] + "\"}]\r\n";
+
+      toSend += "Content-Length: "+String(payload.length())+"\r\n";
+      toSend += "\r\n";
+      toSend += payload;
+      // Serial.println(payload);
+      // Serial.println(toSend);
+      clientIS.println(toSend);
+    }
+    payload_pushed = true;
+  }
+} 
+
+
+void static_postData_csv() {
+  // close any connection before send a new request.
+  // This will free the socket on the WiFi shield
+  clientIS.stop();
+  // if there's a successful connection:
+  Serial.println("[static_postData_CSV] clientIS stopped and contacting ISDestURL ...");
+
+  if (clientIS.connect(ISDestURL, 80) == SUCCESS) {
+   Serial.println("[static_postData_CSV] connection to ISDestURL successful...");
+    // send the HTTP PUT request:
+    // Build HTTP request.
+
+    for (int i=0; i<payloadSizeCSV; i++){
+      String toSend = "POST /api/events HTTP/1.1\r\n";
+      toSend += "Host:";
+      toSend += ISDestURL;
+      toSend += "\r\n" ;
+      toSend += "Content-Type: application/json\r\n";
+      toSend += "User-Agent: Arduino\r\n";
+      toSend += "Accept-Version: ~0\r\n";
+      toSend += "X-IS-AccessKey: " accessKey "\r\n";
+      toSend += "X-IS-BucketKey: " bucketKey_csv "\r\n";
+
+      String payload = "[{\"key\": \"" + signalNameCSV[i] + "\", ";
+      payload +="\"value\": \"" + signalDataCSV[i] + "\"}]\r\n";
 
       toSend += "Content-Length: "+String(payload.length())+"\r\n";
       toSend += "\r\n";
