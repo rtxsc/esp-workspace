@@ -10,10 +10,13 @@
 #include <Encoder.h>
 
 #define DELAY_MICROSEC 500
-//#define ENCODER_CONTROL
+
 #define AUTO_CONTROL
+// #define ENCODER_CONTROL
+// #define AUTO_LOOP
 // #define CNC_SHIELD // comment this out if not using CNC Shield
 // #define CHANGE_EMISSIVITY
+// #define TEST_HEIGHT_SENSOR
 
 /*
 Pin usage CPS-HPV
@@ -45,13 +48,12 @@ Consider 10% lower than rated current
 I = 1.7 - (1.7x0.1) = 1.53 A
 Vref = I x 8 x Rsense = 1.53A x 8 x 0.1R = 1.224V
 
-
 */
 
 #define SENSOR_HEIGHT       200
 #define MAX_STEPS           3090      
 #define STEPPER_POS_ADDRESS 0
-#define height_offset       12
+#define height_offset       0 // 12 - standard HCSR04 || 0 - Grove HCSR04
 
 #define SCREEN_WIDTH 128 
 #define SCREEN_HEIGHT 64 
@@ -69,13 +71,21 @@ Vref = I x 8 x Rsense = 1.53A x 8 x 0.1R = 1.224V
   const uint8_t stepPin = X_STEP; //X.STEP D2
   const uint8_t dirPin = X_DIR; // X.DIR D5
 #else
+  // D2 available
   #define CLK           3  // GYVER
   #define DIO           4  // GYVER
+  // D5 Presence Trig
+  // D6 Presence Echo
+  // D7 Height Grove Sig
   #define BUZZER        8
-  #define stepPin       9
-  #define dirPin        10
+  #define stepPin       9  // gray
+  #define dirPin        10 // blue
+  // D11 Available
   #define PRESENCE_LED  12
   #define MODE_SELECT   13
+
+  Encoder myEnc(2, 11); // using the spare D2 and D11 for now
+  int x; // global indexing for Encoder position 24.06.2022
 #endif
 
 
@@ -116,20 +126,13 @@ void writeIntIntoEEPROM(int address, int number)
 }
 
 void setup() {
-
   Serial.begin(115200);
-  mlx.begin(); 
-
   pinMode(MODE_SELECT, INPUT_PULLUP);
   pinMode(BUZZER, OUTPUT);
-  beep_once();
-  delay(500);
-  beep_twice();
-  delay(500);
-  beep_thrice();
-  delay(500);
-  siren();
-  delay(500);
+  pinMode(stepPin,OUTPUT); 
+  pinMode(dirPin,OUTPUT);
+  pinMode(PRESENCE_LED,OUTPUT); // LED at D10 as presence status
+
   // for(int addr = 0; addr < 5; addr++){
   //   eeprom_val = EEPROM.read(addr);
   //   Serial.print("Memory ");
@@ -139,14 +142,12 @@ void setup() {
 	//   Serial.println();
   //   delay(100);
   // }
-
-
-  oldPosition = readIntFromEEPROM(STEPPER_POS_ADDRESS);
-  if(oldPosition==255){
-      Serial.println(":::Stepper Default Position Not Saved in Memory:::");
-      delay(1000);
-  }
-
+  mlx.begin(); 
+  disp.clear();
+  disp.brightness(7);  // яркость, 0 - 7 (минимум - максимум)
+  byte test[4] = {_t, _e, _S, _t};
+  disp.point(0);   
+  disp.twistByte(test, 25);
   #ifdef CHANGE_EMISSIVITY
     // read current emissivity
     Serial.print("Current emissivity = "); Serial.println(mlx.readEmissivity());
@@ -156,21 +157,27 @@ void setup() {
     // read back
     Serial.print("New emissivity = "); Serial.println(mlx.readEmissivity());  // if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x64
   #endif
-  pinMode(stepPin,OUTPUT); 
-  pinMode(dirPin,OUTPUT);
-  pinMode(PRESENCE_LED,OUTPUT); // LED at D10 as presence status
-  Serial.print("DELAY_MICROSECOND:");
-  Serial.println(DELAY_MICROSEC);
 
   #ifdef AUTO_CONTROL
-        Serial.println(":::Manual Input Controlled Linear Stepper:::");
-        Serial.println(":Please insert any value ranging from 140-200(cm) into the field:");
-  #endif
-
-  disp.clear();
-  disp.brightness(7);  // яркость, 0 - 7 (минимум - максимум)
-  runningText();
-  randomSeed(analogRead(Abort));
+  beep_once();
+  delay(500);
+  beep_twice();
+  delay(500);
+  beep_thrice();
+  delay(500);
+  siren();
+  delay(500);
+ 
+  oldPosition = readIntFromEEPROM(STEPPER_POS_ADDRESS);
+  if(oldPosition==255){
+      Serial.println(":::Stepper Default Position Not Saved in Memory:::");
+      delay(1000);
+  }
+  Serial.print("DELAY_MICROSECOND:");
+  Serial.println(DELAY_MICROSEC);
+  Serial.println(":::Auto HCSR04 Input Controlled Linear Stepper:::");
+  welcomeScroll();
+  // randomSeed(analogRead(Abort)); // disabled 24.06.2022
 
   Serial.println("\n\n::::::::: Mode :::::::::");
   Serial.print("\t");
@@ -240,14 +247,89 @@ void setup() {
       Serial.println("\t::::::::::: Sensor Idling at BOTTOM_POS :::::::::::");
 
     }
-
   }
+  #endif
 
 
  } // end of void setup()
 
 
  void loop() {
+
+  #ifdef TEST_HEIGHT_SENSOR
+
+  int distanceToObject = height_sensor.MeasureInCentimeters();
+  int height_cm = (SENSOR_HEIGHT - distanceToObject) - height_offset ; // 200-50=150
+
+  if(height_cm < 140) height_cm = 140;
+  if(height_cm > 200) height_cm = 200;
+
+  Serial.print("[ULTRASONIC] Height received: ");
+  Serial.print(height_cm, DEC);
+  Serial.println(" cm");
+
+  int LOWEST_STEP = 10;
+  int mapped_height = map(height_cm, 140, 200, 0, 60);
+  newPosition = map(mapped_height, 0, 60, LOWEST_STEP, MAX_STEPS); 
+
+  byte height[4];
+  for (int i = 3 ; i >= 0 ; i--)
+  {
+    height[i] = height_cm % 10 ;
+    height_cm /= 10 ;
+  }
+  disp.clear();
+  disp.point(1);    
+  // disp.twistByte(height, 1);     
+  disp.scroll(height, 100);  
+  delay(DELAY_MICROSEC);
+  #endif
+
+  #ifdef ENCODER_CONTROL
+  /* polished logic 24.06.2022 Friday 23:41PM */
+  int newPosition = (myEnc.read() / 2) * 200; // 200 x 1.8deg = 360deg per Encoder step
+  if(newPosition < 0) newPosition = 0;
+  if(newPosition > MAX_STEPS) newPosition = MAX_STEPS;
+
+  if(newPosition != oldPosition){
+    Serial.println(":::Encoder Controlled Linear Stepper:::");
+    if(newPosition > oldPosition){
+      Serial.print("[+NEW POS UP++] :"); Serial.println(newPosition); // from 0 to MAX_STEPS
+    }
+    else{
+      Serial.print("[-NEW POS DOWN] :"); Serial.println(newPosition); // from MAX_STEPS to 0
+    }
+  }
+
+  if (newPosition != oldPosition && newPosition > oldPosition) {
+    digitalWrite(dirPin,HIGH); // Enables the motor to move in a particular direction
+    // Makes 200 pulses for making one full cycle rotation
+    for(x = oldPosition; x <= newPosition; x++) {
+      //  Serial.print("[TO DESTINATION] x_up:"); Serial.println(x); // from 0 to MAX_STEPS
+       digitalWrite(stepPin,HIGH); 
+       delayMicroseconds(DELAY_MICROSEC); 
+       digitalWrite(stepPin,LOW); 
+       delayMicroseconds(DELAY_MICROSEC); 
+    }
+    oldPosition = newPosition;
+  }
+
+  if (newPosition != oldPosition && newPosition < oldPosition) {
+    digitalWrite(dirPin,LOW); // Enables the motor to move in a particular direction
+    // Makes 200 pulses for making one full cycle rotation
+    for(x = oldPosition; x >= newPosition; --x) {
+      // Serial.print("[TO DESTINATION] x_down:"); Serial.println(x);  // from MAX_STEPS to 0
+      digitalWrite(stepPin,HIGH); 
+      delayMicroseconds(DELAY_MICROSEC); 
+      digitalWrite(stepPin,LOW); 
+      delayMicroseconds(DELAY_MICROSEC); 
+    }
+    oldPosition = newPosition;
+  }
+
+  delay(100);
+
+  #elif defined AUTO_CONTROL
 
     // use Grove HC-SR04
     // MeasureInCentimeters - Grove
@@ -262,44 +344,17 @@ void setup() {
     // Serial.print("\tHeight:");
     // Serial.println(height_cm);
 
-  #ifdef ENCODER_CONTROL
-  Serial.println(":::Encoder Controlled Linear Stepper:::");
+    // if(millis() % 2 == 0){
+    //   byte here[4] = {_h, _e, _r, _e};
+    //   disp.point(0);   
+    //   disp.twistByte(here, 25);
+    // }
+    // else{
+    //   disp.displayInt(height_cm);
+    // }
 
-  long newPosition = myEnc.read() / 2;
-  if (newPosition != oldPosition && newPosition > oldPosition) {
-    digitalWrite(dirPin,HIGH); // Enables the motor to move in a particular direction
-    oldPosition = newPosition;
-     // Makes 200 pulses for making one full cycle rotation
-     for(x = oldPosition+(x-newPosition); x <= newPosition*200; x++) {
-       digitalWrite(stepPin,HIGH); 
-       delayMicroseconds(DELAY_MICROSEC); 
-       digitalWrite(stepPin,LOW); 
-       delayMicroseconds(DELAY_MICROSEC); 
-     }
-  }
+    disp.displayInt(height_cm);
 
-  if (newPosition != oldPosition && newPosition < oldPosition) {
-    digitalWrite(dirPin,LOW); // Enables the motor to move in a particular direction
-    oldPosition = newPosition;
-     // Makes 200 pulses for making one full cycle rotation
-     for(x = oldPosition+(x-newPosition); x >= newPosition*200; --x) {
-       digitalWrite(stepPin,HIGH); 
-       delayMicroseconds(DELAY_MICROSEC); 
-       digitalWrite(stepPin,LOW); 
-       delayMicroseconds(DELAY_MICROSEC); 
-     }
-  }
-
-  #elif defined AUTO_CONTROL
-
-    if(millis() % 2 == 0){
-      byte here[4] = {_h, _e, _r, _e};
-      disp.point(0);   
-      disp.twistByte(here, 25);
-    }
-    else{
-      disp.displayInt(distanceToObject);
-    }
   
     // while (Serial.available() > 0) {
     //     Serial.println(":::Manual Input Controlled Linear Stepper:::");
@@ -321,8 +376,10 @@ void setup() {
         Serial.print("[ULTRASONIC] Height received: ");
         Serial.print(height_cm, DEC);
         Serial.println(" cm");
+
+        int LOWEST_STEP = 10;
         int mapped_height = map(height_cm, 140, 200, 0, 60);
-        newPosition = map(mapped_height, 0, 60, 0, MAX_STEPS); 
+        newPosition = map(mapped_height, 0, 60, LOWEST_STEP, MAX_STEPS); 
       
         byte height[4];
         for (int i = 3 ; i >= 0 ; i--)
@@ -480,7 +537,7 @@ void setup() {
     delay(1000); // master delay in this USER INPUT loop
     disp.clear();
 
-  #else
+  #elif defined AUTO_LOOP
     Serial.println(":::Automated Linear Stepper:::");
     digitalWrite(dirPin,HIGH); //Changes the rotations direction
     for(int x = 0; x < MAX_STEPS; x++) {
@@ -502,8 +559,8 @@ void setup() {
  #endif
  }
 
-void runningText() {
-  byte welcome_banner[] = {_H, _E, _L, _L, _O, _empty,        
+void welcomeScroll() {
+  byte welcome_banner[] = {_H, _E, _L, _L, _O, _empty, _C, _P, _S, _empty,       
                           };
   disp.runningString(welcome_banner, sizeof(welcome_banner), 200);  // 200 это время в миллисекундах!
 }
