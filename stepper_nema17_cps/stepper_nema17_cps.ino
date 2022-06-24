@@ -1,16 +1,25 @@
 #include "GyverTM1637.h" // for BIG VERSION
 #include <HCSR04.h>
 #include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+// #include <Adafruit_GFX.h>
+// #include <Adafruit_SSD1306.h>
 #include <Adafruit_MLX90614.h>
 #include "Ultrasonic.h"
 #include <EEPROM.h>
+#include "cnc_shield_uno.h"
+#include <Encoder.h>
+
+#define DELAY_MICROSEC 500
+//#define ENCODER_CONTROL
+#define AUTO_CONTROL
+// #define CNC_SHIELD // comment this out if not using CNC Shield
+// #define CHANGE_EMISSIVITY
+
 /*
 Pin usage CPS-HPV
 D2 - A4988 X.STEP
 D3 - Gyver CLK
-D4 - Gyver CLK
+D4 - Gyver DIO
 D5 - A4988 X.DIR
 D6 - HCSR04 TRIG
 D7 - HCSR04 ECHO
@@ -27,7 +36,19 @@ A3
 A4
 A5
 
+
+HW-434 Setup
+
+HANPOSE 17HS4401S Vref Config
+Phase Current (I): 1.7A
+Consider 10% lower than rated current
+I = 1.7 - (1.7x0.1) = 1.53 A
+Vref = I x 8 x Rsense = 1.53A x 8 x 0.1R = 1.224V
+
+
 */
+
+#define SENSOR_HEIGHT       200
 #define MAX_STEPS           3090      
 #define STEPPER_POS_ADDRESS 0
 #define height_offset       12
@@ -36,41 +57,51 @@ A5
 #define SCREEN_HEIGHT 64 
 #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 
-#define CLK Y_STEP
-#define DIO Z_STEP
-#define PRESENCE_LED Y_POS_NEG
-#define SENSOR_HEIGHT 200
-#define MODE_SELECT Y_POS_NEG
 
-#include "cnc_shield_uno.h"
-#include <Encoder.h>
-#define DELAY_MICROSEC 500
-//#define ENCODER_CONTROL
-#define INPUT_CONTROL
+#ifdef CNC_SHIELD
+  Encoder myEnc(Z_POS_NEG, SpnEn);
+  #define CLK Y_STEP  // GYVER D3
+  #define DIO Z_STEP  // GYVER D4
+  #define PRESENCE_LED Z_POS_NEG
+  #define MODE_SELECT SpnDir // D13
+  #define BUZZER        8
+  // Stepper Motor X
+  const uint8_t stepPin = X_STEP; //X.STEP D2
+  const uint8_t dirPin = X_DIR; // X.DIR D5
+#else
+  #define CLK           3  // GYVER
+  #define DIO           4  // GYVER
+  #define BUZZER        8
+  #define stepPin       9
+  #define dirPin        10
+  #define PRESENCE_LED  12
+  #define MODE_SELECT   13
+#endif
+
 
 byte height_sense[4];
 bool presence_detected = false;
+uint16_t DEFAULT_POS;       // will cause unavoidable low memory issue 24.06.2022
+uint16_t oldPosition  = 0;  // change to uint16_t 24.06.2022
+uint16_t newPosition;       // change to uint16_t 24.06.2022
 
 GyverTM1637               disp(CLK, DIO);
-UltraSonicDistanceSensor  distanceSensor(Y_DIR, Z_DIR);  // normal HCSR04 - Height (could be changed to Grove)
-Ultrasonic                ultrasonic(X_POS_NEG); // Grove HCSR04 - Presence
+#ifdef CNC_SHIELD
+UltraSonicDistanceSensor  presence_sensor(Y_DIR, Z_DIR);  // normal HCSR04 - Presence
+Ultrasonic                height_sensor(X_POS_NEG);       // Grove HCSR04 - Height
+#else
+UltraSonicDistanceSensor  presence_sensor(5, 6);          // normal HCSR04 - Presence
+Ultrasonic                height_sensor(7);               // Grove HCSR04 - Height
+#endif
+
 Adafruit_MLX90614         mlx = Adafruit_MLX90614();
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// Stepper Motor X
-Encoder myEnc(SpnEn, SpnDir);
-const uint8_t stepPin = X_STEP; //X.STEP
-const uint8_t dirPin = X_DIR; // X.DIR
-int oldPosition  = -999;
-int newPosition;
-
+// Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 // int eeprom_val; //  disabled for memory reservation
-uint16_t DEFAULT_POS;
 
-// #define CHANGE_EMISSIVITY
 
 #ifdef CHANGE_EMISSIVITY
-  double new_emissivity = 0.5;
+  double new_emissivity = 0.7; // default at E=1
 #endif
 
 int readIntFromEEPROM(int address)
@@ -85,11 +116,20 @@ void writeIntIntoEEPROM(int address, int number)
 }
 
 void setup() {
+
   Serial.begin(115200);
   mlx.begin(); 
 
   pinMode(MODE_SELECT, INPUT_PULLUP);
-
+  pinMode(BUZZER, OUTPUT);
+  beep_once();
+  delay(500);
+  beep_twice();
+  delay(500);
+  beep_thrice();
+  delay(500);
+  siren();
+  delay(500);
   // for(int addr = 0; addr < 5; addr++){
   //   eeprom_val = EEPROM.read(addr);
   //   Serial.print("Memory ");
@@ -99,6 +139,7 @@ void setup() {
 	//   Serial.println();
   //   delay(100);
   // }
+
 
   oldPosition = readIntFromEEPROM(STEPPER_POS_ADDRESS);
   if(oldPosition==255){
@@ -121,7 +162,7 @@ void setup() {
   Serial.print("DELAY_MICROSECOND:");
   Serial.println(DELAY_MICROSEC);
 
-  #ifdef INPUT_CONTROL
+  #ifdef AUTO_CONTROL
         Serial.println(":::Manual Input Controlled Linear Stepper:::");
         Serial.println(":Please insert any value ranging from 140-200(cm) into the field:");
   #endif
@@ -208,7 +249,11 @@ void setup() {
 
  void loop() {
 
-    int distanceToObject = distanceSensor.measureDistanceCm();
+    // use Grove HC-SR04
+    // MeasureInCentimeters - Grove
+    // measureDistanceCm - Standard
+
+    int distanceToObject = height_sensor.MeasureInCentimeters();
     int height_cm = (SENSOR_HEIGHT - distanceToObject) - height_offset ; // 200-50=150
     // Serial.print("[PRESENCE ULTRASONIC] State: ");
     // Serial.print(personExist());
@@ -245,7 +290,7 @@ void setup() {
      }
   }
 
-  #elif defined INPUT_CONTROL
+  #elif defined AUTO_CONTROL
 
     if(millis() % 2 == 0){
       byte here[4] = {_h, _e, _r, _e};
@@ -256,14 +301,18 @@ void setup() {
       disp.displayInt(distanceToObject);
     }
   
-
     // while (Serial.available() > 0) {
     //     Serial.println(":::Manual Input Controlled Linear Stepper:::");
     //     // read the incoming byte:
     //     height_cm = Serial.parseInt(); 
 
     while(personExist()){
-        distanceToObject = distanceSensor.measureDistanceCm();
+
+        // use Grove HC-SR04
+        // MeasureInCentimeters - Grove
+        // measureDistanceCm - Standard
+      
+        distanceToObject = height_sensor.MeasureInCentimeters();
         height_cm = (SENSOR_HEIGHT - distanceToObject) - height_offset ; // 200-50=150
 
         if(height_cm < 140) height_cm = 140;
@@ -362,7 +411,7 @@ void setup() {
 
     Serial.println("\t:::::::::::Scanning temp (100ms delay):::::::::::");
 
-    int head_temp = mlx.readObjectTempC();
+    float head_temp = mlx.readObjectTempC(); // change to float 24.06.2022
     delay(100);
     Serial.print("forehead temp:");
     Serial.println(head_temp);
@@ -378,8 +427,17 @@ void setup() {
     disp.clear();
     disp.twistByte(tempc, 1);     
     disp.point(1);   
-    disp.scroll(tempc, 100);     
-
+    disp.scroll(tempc, 100);   
+    // normal 35.4 °C and 37.4 °C.
+    if(head_temp >= 0 && head_temp < 35)
+      beep_twice(); // abnormally low
+    else if(head_temp >= 35 && head_temp <= 37)  
+      beep_once(); // normal
+    else if(head_temp >= 37 && head_temp <= 39)  
+      beep_thrice(); // above normal
+    else   
+      siren(); // abnormally high
+    
     Serial.println("\t:::::::::::Scanning temp DONE:::::::::::");
     Serial.println("\t:::::::::::Going Home:::::::::::");
     newPosition = DEFAULT_POS; // Going Home after 250ms [RETURN BACK TO DEFAULT POSITION]
@@ -451,20 +509,23 @@ void runningText() {
 }
 
 void running_TOP_POS() {
-  byte welcome_banner[] = {_t, _O, _P, _empty, _P, _O, _5, _empty,        
+  byte welcome_banner[] = {_t, _o, _empty,_t, _O, _P, _empty, _P, _O, _5, _empty,        
                           };
   disp.runningString(welcome_banner, sizeof(welcome_banner), 200);  // 200 это время в миллисекундах!
 }
 
 void running_BOTTOM_POS() {
-  byte welcome_banner[] = {_B, _O, _t,_t,_O, _empty, _P, _O, _5, _empty,        
+  byte welcome_banner[] = {_t, _o, _empty,_B, _O, _t,_t,_O, _empty, _P, _O, _5, _empty,        
                           };
   disp.runningString(welcome_banner, sizeof(welcome_banner), 200);  // 200 это время в миллисекундах!
 }
 
  bool personExist(){
+    // use standard HC-SR04
+    // MeasureInCentimeters - Grove
+    // measureDistanceCm - Standard
 
-    int range_cm = ultrasonic.MeasureInCentimeters(); 
+    int range_cm = presence_sensor.measureDistanceCm(); 
     if(range_cm >=0 && range_cm < 50) 
     {
       presence_detected = true;
@@ -478,3 +539,36 @@ void running_BOTTOM_POS() {
     return presence_detected;              
 
  }
+
+void beep_once(){
+  tone(8, 1500, 150);
+}
+
+void beep_twice(){
+  tone(8, 1500, 50);
+  delay(100);
+  tone(8, 1500, 50);
+  delay(100);
+}
+
+void beep_thrice(){
+  tone(8, 1500, 50);
+  delay(100);
+  tone(8, 1500, 50);
+  delay(100);
+  tone(8, 1500, 50);
+  delay(100);
+}
+
+void siren(){
+  int min_tone = 700;
+  int max_tone = 1500;
+  for(int i=min_tone ; i <= max_tone ; i++){
+      tone(8, i, 20);
+      delay(1);        // delay in between reads for stability
+  }
+  for(int i=max_tone ; i > min_tone ; i--){
+      tone(8, i, 20);
+      delay(1);        // delay in between reads for stability
+  }
+}
