@@ -1,3 +1,4 @@
+// latest update 28.06.2022 00:43
 #include "GyverTM1637.h" // for BIG VERSION
 #include <HCSR04.h>
 #include <Wire.h>
@@ -9,6 +10,12 @@
 #include "cnc_shield_uno.h"
 #include <Encoder.h>
 
+#include <Adafruit_NeoPixel.h>
+#define LED_PIN     A1
+#define LED_COUNT   24
+Adafruit_NeoPixel   strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+
 #define DELAY_MICROSEC 500
 
 #define AUTO_CONTROL
@@ -17,6 +24,7 @@
 // #define CNC_SHIELD // comment this out if not using CNC Shield
 // #define CHANGE_EMISSIVITY
 // #define TEST_HEIGHT_SENSOR
+// #define DEBUG_MODE
 
 /*
 Pin usage CPS-HPV
@@ -55,10 +63,9 @@ Vref = I x 8 x Rsense = 1.53A x 8 x 0.1R = 1.224V
 #define STEPPER_POS_ADDRESS 0
 #define height_offset       0 // 12 - standard HCSR04 || 0 - Grove HCSR04
 
-#define SCREEN_WIDTH 128 
-#define SCREEN_HEIGHT 64 
-#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
-
+#define SCREEN_WIDTH        128 
+#define SCREEN_HEIGHT       64 
+#define OLED_RESET          -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 
 #ifdef CNC_SHIELD
   Encoder myEnc(Z_POS_NEG, SpnEn);
@@ -71,7 +78,7 @@ Vref = I x 8 x Rsense = 1.53A x 8 x 0.1R = 1.224V
   const uint8_t stepPin = X_STEP; //X.STEP D2
   const uint8_t dirPin = X_DIR; // X.DIR D5
 #else
-  // D2 available
+  // D2 available if not in ENCODER_CONTROL mode
   #define CLK           3  // GYVER
   #define DIO           4  // GYVER
   // D5 Presence Trig
@@ -80,11 +87,15 @@ Vref = I x 8 x Rsense = 1.53A x 8 x 0.1R = 1.224V
   #define BUZZER        8
   #define stepPin       9  // gray
   #define dirPin        10 // blue
-  // D11 Available
-  #define PRESENCE_LED  12
-  #define MODE_SELECT   13
+  #define enablePin     11
+  // D11 Available if not in ENCODER_CONTROL mode
 
+  #define PRESENCE_LED  12 // not utilized yet
+  #define MODE_SELECT   13 // DO NOT DISTURB THIS PIN
+
+#ifdef ENCODER_CONTROL
   Encoder myEnc(2, 11); // using the spare D2 and D11 for now
+#endif
   int x; // global indexing for Encoder position 24.06.2022
 #endif
 
@@ -100,7 +111,7 @@ GyverTM1637               disp(CLK, DIO);
 UltraSonicDistanceSensor  presence_sensor(Y_DIR, Z_DIR);  // normal HCSR04 - Presence
 Ultrasonic                height_sensor(X_POS_NEG);       // Grove HCSR04 - Height
 #else
-UltraSonicDistanceSensor  presence_sensor(5, 6);          // normal HCSR04 - Presence
+UltraSonicDistanceSensor  presence_sensor(5, 6);          // normal HCSR04 - Presence (TRIG,ECHO)
 Ultrasonic                height_sensor(7);               // Grove HCSR04 - Height
 #endif
 
@@ -111,7 +122,7 @@ Adafruit_MLX90614         mlx = Adafruit_MLX90614();
 
 
 #ifdef CHANGE_EMISSIVITY
-  double new_emissivity = 0.7; // default at E=1
+  double new_emissivity = 0.8; // default at E=1
 #endif
 
 int readIntFromEEPROM(int address)
@@ -131,7 +142,12 @@ void setup() {
   pinMode(BUZZER, OUTPUT);
   pinMode(stepPin,OUTPUT); 
   pinMode(dirPin,OUTPUT);
+  pinMode(enablePin,OUTPUT);
   pinMode(PRESENCE_LED,OUTPUT); // LED at D10 as presence status
+
+  strip.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
+  strip.show();            // Turn OFF all pixels ASAP
+  strip.setBrightness(50);
 
   // for(int addr = 0; addr < 5; addr++){
   //   eeprom_val = EEPROM.read(addr);
@@ -157,6 +173,9 @@ void setup() {
     // read back
     Serial.print("New emissivity = "); Serial.println(mlx.readEmissivity());  // if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x64
   #endif
+  delay(1000);
+  disp.displayInt(mlx.readEmissivity()*1000);
+  delay(1000);
 
   #ifdef AUTO_CONTROL
   beep_once();
@@ -165,8 +184,8 @@ void setup() {
   delay(500);
   beep_thrice();
   delay(500);
-  siren();
-  delay(500);
+  // siren();
+  // delay(500);
  
   oldPosition = readIntFromEEPROM(STEPPER_POS_ADDRESS);
   if(oldPosition==255){
@@ -177,7 +196,7 @@ void setup() {
   Serial.println(DELAY_MICROSEC);
   Serial.println(":::Auto HCSR04 Input Controlled Linear Stepper:::");
   welcomeScroll();
-  // randomSeed(analogRead(Abort)); // disabled 24.06.2022
+  randomSeed(analogRead(A0)); // disabled 24.06.2022
 
   Serial.println("\n\n::::::::: Mode :::::::::");
   Serial.print("\t");
@@ -250,6 +269,7 @@ void setup() {
   }
   #endif
 
+  disable_stepper();
 
  } // end of void setup()
 
@@ -334,9 +354,11 @@ void setup() {
     // use Grove HC-SR04
     // MeasureInCentimeters - Grove
     // measureDistanceCm - Standard
+    disable_stepper();
 
     int distanceToObject = height_sensor.MeasureInCentimeters();
     int height_cm = (SENSOR_HEIGHT - distanceToObject) - height_offset ; // 200-50=150
+    if(height_cm < 0) height_cm = 0;
     // Serial.print("[PRESENCE ULTRASONIC] State: ");
     // Serial.print(personExist());
     // Serial.print("\tTo object:");
@@ -344,16 +366,23 @@ void setup() {
     // Serial.print("\tHeight:");
     // Serial.println(height_cm);
 
-    // if(millis() % 2 == 0){
-    //   byte here[4] = {_h, _e, _r, _e};
-    //   disp.point(0);   
-    //   disp.twistByte(here, 25);
-    // }
-    // else{
-    //   disp.displayInt(height_cm);
-    // }
+    if(millis() % 5 == 0){
 
-    disp.displayInt(height_cm);
+      byte get_[4] = {_empty,_G, _e, _t};
+      disp.point(0);   
+      disp.twistByte(get_, 25);
+      delay(50);
+      byte here[4] = {_h, _e, _r, _e};
+      disp.point(0);   
+      disp.twistByte(here, 25);
+    }
+    else{
+      disp.displayInt(height_cm);
+    }
+
+    rainbow(10); 
+
+    // disp.displayInt(height_cm);
 
   
     // while (Serial.available() > 0) {
@@ -366,16 +395,45 @@ void setup() {
         // use Grove HC-SR04
         // MeasureInCentimeters - Grove
         // measureDistanceCm - Standard
-      
-        distanceToObject = height_sensor.MeasureInCentimeters();
-        height_cm = (SENSOR_HEIGHT - distanceToObject) - height_offset ; // 200-50=150
+
+        byte read[4] = {_r, _e, _a, _d};
+        disp.point(0);   
+        disp.scrollByte(read, 25);
+        delay(500);
+    
+        do{
+          distanceToObject = height_sensor.MeasureInCentimeters();
+          height_cm = (SENSOR_HEIGHT - distanceToObject) - height_offset ; // 200-50=150
+
+          if(height_cm < 140){
+            byte low[4] = {_empty, _empty, _L, _O};
+            disp.point(0);   
+            disp.scrollByte(low, 25);
+            delay(500);
+          }else{
+            byte good[4] = {_G, _o, _o, _d};
+            disp.point(0);   
+            disp.scrollByte(good, 25);
+            delay(500);
+
+          }
+
+          if(!personExist()) break;
+
+
+
+          disp.displayInt(height_cm);
+          delay(500);
+        } while(height_cm < 140 || height_cm > 200);
 
         if(height_cm < 140) height_cm = 140;
         if(height_cm > 200) height_cm = 200;
 
+        #ifdef DEBUG_MODE
         Serial.print("[ULTRASONIC] Height received: ");
         Serial.print(height_cm, DEC);
         Serial.println(" cm");
+        #endif
 
         int LOWEST_STEP = 10;
         int mapped_height = map(height_cm, 140, 200, 0, 60);
@@ -393,8 +451,10 @@ void setup() {
         disp.scroll(height, 100);     
         delay(DELAY_MICROSEC);
 
+        #ifdef DEBUG_MODE
         Serial.print("!!!!!!!!!!!!!!!!!!!!!!!!!!! Moving to newPosition at: ");
         Serial.println(newPosition, DEC);
+        #endif
       
       if(DEFAULT_POS == BOTTOM_POS){ // sensor at BOTTOM_POS
         if (newPosition != oldPosition && newPosition > oldPosition) {
@@ -411,6 +471,7 @@ void setup() {
           delay(100);
           break;
         }
+        enable_stepper();
         digitalWrite(dirPin,HIGH); // go up away from stepper HOME
         for(int x = oldPosition; x <= newPosition; x++) {
           // Serial.print("[TO DESTINATION] x_up:"); Serial.println(x); // from 0 to MAX_STEPS
@@ -438,6 +499,7 @@ void setup() {
           delay(100);
           break;
         }
+      enable_stepper();
       digitalWrite(dirPin,LOW); // go down towards stepper HOME
       for(int x = oldPosition; x >= newPosition; --x) {
         // Serial.print("[TO DESTINATION] x_down:"); Serial.println(x);  // from MAX_STEPS to 0
@@ -451,13 +513,15 @@ void setup() {
     }
 
     }
-    Serial.println("\t::::::::::: Saving current pos immediately to memory :::::::::::");
+    // Serial.println("\t::::::::::: Saving current pos immediately to memory :::::::::::");
     writeIntIntoEEPROM(STEPPER_POS_ADDRESS, newPosition); // this MUST be saved in case of power failure!
-    Serial.println("\t::::::::::: \\\ Saving current pos DONE /// :::::::::::");
+    // Serial.println("\t::::::::::: \\\ Saving current pos DONE /// :::::::::::");
 
     oldPosition = readIntFromEEPROM(STEPPER_POS_ADDRESS);
+    #ifdef DEBUG_MODE
     Serial.print("\t::::::::::: \\\ Loaded current pos/// :::::::::::");
     Serial.println(oldPosition);
+    #endif
     delay(100);
 
     disp.clear();
@@ -466,15 +530,20 @@ void setup() {
     disp.twistByte(scan, 25);
     delay(250);
 
-    Serial.println("\t:::::::::::Scanning temp (100ms delay):::::::::::");
+    // Serial.println("\t:::::::::::Scanning temp (100ms delay):::::::::::");
 
     float head_temp = mlx.readObjectTempC(); // change to float 24.06.2022
     delay(100);
+
+    #ifdef DEBUG_MODE
     Serial.print("forehead temp:");
     Serial.println(head_temp);
+    #endif
 
     byte tempc[4];
-    int tempc_int = head_temp*100; // random(3500,4000);
+    int tempc_int = head_temp*100; // random(3500,3900);
+    // int tempc_int = random(3600,3700);
+
     for (int i = 3 ; i >= 0 ; i--)
     {
       tempc[i] = tempc_int % 10;
@@ -486,17 +555,33 @@ void setup() {
     disp.point(1);   
     disp.scroll(tempc, 100);   
     // normal 35.4 °C and 37.4 °C.
-    if(head_temp >= 0 && head_temp < 35)
+    if(head_temp >= 0 && head_temp < 35){
+      colorWipe(strip.Color(  0,   0, 255), 50); // Blue
       beep_twice(); // abnormally low
-    else if(head_temp >= 35 && head_temp <= 37)  
+    }
+    else if(head_temp >= 35 && head_temp <= 37){
+      colorWipe(strip.Color(  0, 255,   0), 50); // Green
       beep_once(); // normal
-    else if(head_temp >= 37 && head_temp <= 39)  
+    }  
+    else if(head_temp >= 37 && head_temp <= 39){
+      colorWipe(strip.Color(128,   0,   0), 50); // Light Red
       beep_thrice(); // above normal
-    else   
+    } 
+    else{
+      colorWipe(strip.Color(255,   0,   0), 50); // Red
       siren(); // abnormally high
+    }
+
+    /*
+    colorWipe(strip.Color(255,   0,   0), 50); // Red
+    colorWipe(strip.Color(  0, 255,   0), 50); // Green
+    colorWipe(strip.Color(  0,   0, 255), 50); // Blue
+    */
     
+    #ifdef DEBUG_MODE
     Serial.println("\t:::::::::::Scanning temp DONE:::::::::::");
     Serial.println("\t:::::::::::Going Home:::::::::::");
+    #endif
     newPosition = DEFAULT_POS; // Going Home after 250ms [RETURN BACK TO DEFAULT POSITION]
 
     if(DEFAULT_POS==BOTTOM_POS){
@@ -525,15 +610,16 @@ void setup() {
         oldPosition = newPosition;
 
     }
-    Serial.println("\t::::::::::: Saving current pos | IDLE position :::::::::::");
+    // Serial.println("\t::::::::::: Saving current pos | IDLE position :::::::::::");
     writeIntIntoEEPROM(STEPPER_POS_ADDRESS, oldPosition); // this MUST be saved in case of power failure!
-    Serial.println("\t::::::::::: Saving current pos | IDLE position DONE :::::::::::");
+    // Serial.println("\t::::::::::: Saving current pos | IDLE position DONE :::::::::::");
 
     byte done[4] = {_d, _o, _n, _e};
     disp.point(0);   
     disp.twistByte(done, 25);
     Serial.println(":::: IDLE ::::"); 
   }
+    disable_stepper();
     delay(1000); // master delay in this USER INPUT loop
     disp.clear();
 
@@ -618,7 +704,7 @@ void beep_thrice(){
 }
 
 void siren(){
-  int min_tone = 700;
+  int min_tone = 1000;
   int max_tone = 1500;
   for(int i=min_tone ; i <= max_tone ; i++){
       tone(8, i, 20);
@@ -627,5 +713,41 @@ void siren(){
   for(int i=max_tone ; i > min_tone ; i--){
       tone(8, i, 20);
       delay(1);        // delay in between reads for stability
+  }
+}
+
+void enable_stepper(){
+  digitalWrite(enablePin, LOW);
+}
+
+void disable_stepper(){
+  digitalWrite(enablePin, HIGH);
+}
+
+// Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
+void rainbow(int wait) {
+  // Hue of first pixel runs 5 complete loops through the color wheel.
+  // Color wheel has a range of 65536 but it's OK if we roll over, so
+  // just count from 0 to 5*65536. Adding 256 to firstPixelHue each time
+  // means we'll make 5*65536/256 = 1280 passes through this loop:
+  for(long firstPixelHue = 0; firstPixelHue < 1*65536; firstPixelHue += 2048) {
+    // strip.rainbow() can take a single argument (first pixel hue) or
+    // optionally a few extras: number of rainbow repetitions (default 1),
+    // saturation and value (brightness) (both 0-255, similar to the
+    // ColorHSV() function, default 255), and a true/false flag for whether
+    // to apply gamma correction to provide 'truer' colors (default true).
+    strip.rainbow(firstPixelHue);
+    // Above line is equivalent to:
+    // strip.rainbow(firstPixelHue, 1, 255, 255, true);
+    strip.show(); // Update strip with new contents
+    delay(wait);  // Pause for a moment
+  }
+}
+
+void colorWipe(uint32_t color, int wait) {
+  for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
+    strip.setPixelColor(i, color);         //  Set pixel's color (in RAM)
+    strip.show();                          //  Update strip to match
+    delay(wait);                           //  Pause for a moment
   }
 }
