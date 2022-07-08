@@ -1,18 +1,18 @@
 #define INTERVAL_METHOD
-// #define USE_TM1637 // comment this line if you dont have the display 
-#define ENABLE_SERIAL_DEBUG
+ #define USE_TM1637 // comment this line if you dont have the display 
+//#define ENABLE_SERIAL_DEBUG
 
 #ifdef USE_TM1637
 #include <TM1637Display.h>
 #endif
 
-#define CLK 8
-#define DIO 9
-#define ELAPSE_ONE_SECOND 1000
-#define MINUTE_PER_HOUR 60
-#define TICKS_PER_MINUTE 60
-#define DIVISOR 1 // higher = faster update rate (need more magnets for better precision)
-#define MAGNET_COUNT 5 // set your number of magnets here
+#define CLK                 8
+#define DIO                 9
+#define ELAPSE_ONE_SECOND   1000
+#define MINUTE_PER_HOUR     60
+#define TICKS_PER_MINUTE    60
+#define DIVISOR             2 // higher = faster update rate (need more magnets for better precision)
+#define MAGNET_COUNT        20 // set your number of magnets here
 
 #define pi 3.141592653589793238
 
@@ -23,8 +23,8 @@ TM1637Display display(CLK, DIO);
 const byte ledPin = 13;
 const byte interruptPin = 2;
 volatile byte state = LOW;
-volatile byte tick = 0;
-volatile byte ticks_per_sec = 0;
+volatile int tick = 0;
+volatile int ticks_per_sec = 0;
 
 
 long startMillis;

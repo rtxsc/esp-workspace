@@ -12,11 +12,15 @@
 
 #include <Adafruit_NeoPixel.h>
 #define LED_PIN     A1
-#define LED_COUNT   24
+#define RING_PIN    A2
+#define LED_COUNT   40
+#define RING_COUNT  8
 Adafruit_NeoPixel   strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel   strip_ring(RING_COUNT, RING_PIN, NEO_GRB + NEO_KHZ800);
 
 
-#define DELAY_MICROSEC 500
+#define DELAY_MICROSEC  500
+#define DELAY_100MS     100
 
 #define AUTO_CONTROL
 // #define ENCODER_CONTROL
@@ -148,6 +152,13 @@ void setup() {
   strip.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
   strip.show();            // Turn OFF all pixels ASAP
   strip.setBrightness(50);
+
+  strip_ring.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
+  strip_ring.show();            // Turn OFF all pixels ASAP
+  strip_ring.setBrightness(50);
+
+  rainbow(20); 
+  rainbow_ring(20);
 
   // for(int addr = 0; addr < 5; addr++){
   //   eeprom_val = EEPROM.read(addr);
@@ -381,10 +392,8 @@ void setup() {
     }
 
     rainbow(10); 
-
     // disp.displayInt(height_cm);
 
-  
     // while (Serial.available() > 0) {
     //     Serial.println(":::Manual Input Controlled Linear Stepper:::");
     //     // read the incoming byte:
@@ -399,7 +408,7 @@ void setup() {
         byte read[4] = {_r, _e, _a, _d};
         disp.point(0);   
         disp.scrollByte(read, 25);
-        delay(500);
+        delay(DELAY_100MS);
     
         do{
           distanceToObject = height_sensor.MeasureInCentimeters();
@@ -409,21 +418,19 @@ void setup() {
             byte low[4] = {_empty, _empty, _L, _O};
             disp.point(0);   
             disp.scrollByte(low, 25);
-            delay(500);
+            delay(DELAY_100MS);
           }else{
             byte good[4] = {_G, _o, _o, _d};
             disp.point(0);   
             disp.scrollByte(good, 25);
-            delay(500);
+            delay(DELAY_100MS);
 
           }
 
           if(!personExist()) break;
 
-
-
           disp.displayInt(height_cm);
-          delay(500);
+          delay(DELAY_100MS);
         } while(height_cm < 140 || height_cm > 200);
 
         if(height_cm < 140) height_cm = 140;
@@ -464,11 +471,12 @@ void setup() {
           disp.twistByte(hold, 25);
         }
         else{
+          personMissing();
           byte halt[4] = {_H, _a, _L, _t};
           disp.point(0);  
           disp.twistByte(halt, 25);
           Serial.println("############# Person missing! Aborting task....#############");
-          delay(100);
+          delay(DELAY_100MS);
           break;
         }
         enable_stepper();
@@ -492,11 +500,12 @@ void setup() {
           disp.twistByte(hold, 25);
         }
         else{
+          personMissing();
           byte halt[4] = {_H, _a, _L, _t};
           disp.point(0);  
           disp.twistByte(halt, 25);
           Serial.println("############# Person missing! Aborting task....#############");
-          delay(100);
+          delay(DELAY_100MS);
           break;
         }
       enable_stepper();
@@ -522,18 +531,18 @@ void setup() {
     Serial.print("\t::::::::::: \\\ Loaded current pos/// :::::::::::");
     Serial.println(oldPosition);
     #endif
-    delay(100);
+    delay(DELAY_100MS);
 
     disp.clear();
     byte scan[4] = {_5, _c, _a, _n};
     disp.point(0);   
     disp.twistByte(scan, 25);
-    delay(250);
+    delay(DELAY_100MS);
 
     // Serial.println("\t:::::::::::Scanning temp (100ms delay):::::::::::");
 
     float head_temp = mlx.readObjectTempC(); // change to float 24.06.2022
-    delay(100);
+    delay(DELAY_100MS);
 
     #ifdef DEBUG_MODE
     Serial.print("forehead temp:");
@@ -556,19 +565,19 @@ void setup() {
     disp.scroll(tempc, 100);   
     // normal 35.4 °C and 37.4 °C.
     if(head_temp >= 0 && head_temp < 35){
-      colorWipe(strip.Color(  0,   0, 255), 50); // Blue
+      colorWipe(strip.Color(  0,   0, 255), 10); // Blue
       beep_twice(); // abnormally low
     }
     else if(head_temp >= 35 && head_temp <= 37){
-      colorWipe(strip.Color(  0, 255,   0), 50); // Green
+      colorWipe(strip.Color(  0, 255,   0), 10); // Green
       beep_once(); // normal
     }  
     else if(head_temp >= 37 && head_temp <= 39){
-      colorWipe(strip.Color(128,   0,   0), 50); // Light Red
+      colorWipe(strip.Color(128,   0,   0), 10); // Light Red
       beep_thrice(); // above normal
     } 
     else{
-      colorWipe(strip.Color(255,   0,   0), 50); // Red
+      colorWipe(strip.Color(255,   0,   0), 10); // Red
       siren(); // abnormally high
     }
 
@@ -673,11 +682,12 @@ void running_BOTTOM_POS() {
     {
       presence_detected = true;
       digitalWrite(PRESENCE_LED,1);
+      personDetected();
     }
     else{
       presence_detected = false;
       digitalWrite(PRESENCE_LED,0);
-
+      personNotDetected();
     }
     return presence_detected;              
 
@@ -744,10 +754,48 @@ void rainbow(int wait) {
   }
 }
 
+void rainbow_ring(int wait) {
+  for(long firstPixelHue = 0; firstPixelHue < 1*65536; firstPixelHue += 2048) {
+    strip_ring.rainbow(firstPixelHue);
+    strip_ring.show(); // Update strip with new contents
+    delay(wait);  // Pause for a moment
+  }
+}
+
 void colorWipe(uint32_t color, int wait) {
   for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
     strip.setPixelColor(i, color);         //  Set pixel's color (in RAM)
     strip.show();                          //  Update strip to match
     delay(wait);                           //  Pause for a moment
   }
+}
+
+void colorWipeRing(uint32_t color, int wait) {
+  for(int i=0; i<strip_ring.numPixels(); i++) { // For each pixel in strip...
+    strip_ring.setPixelColor(i, color);         //  Set pixel's color (in RAM)
+    strip_ring.show();                          //  Update strip to match
+    delay(wait);                           //  Pause for a moment
+  }
+}
+
+/*
+    colorWipeRing(strip_ring.Color(  0,   0, 255), 50); // Blue - Person Missing
+    delay(10);
+    colorWipeRing(strip_ring.Color(  0,   255, 0), 50); // Green - Person Detected
+    delay(10);
+    colorWipeRing(strip_ring.Color(  255,  0, 0), 50); // Red - Person Not Detected
+    delay(10);
+*/
+
+void personDetected(){
+    colorWipeRing(strip_ring.Color(  0,   255, 0), 50); // Green - Person Detected
+}
+
+void personNotDetected(){
+    colorWipeRing(strip_ring.Color(  255,  0, 0), 50); // Red - Person Not Detected
+}
+
+void personMissing(){
+    colorWipeRing(strip_ring.Color(  0,   0, 255), 50); // Blue - Person Missing
+
 }
