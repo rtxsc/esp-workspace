@@ -1,6 +1,6 @@
 #define BLYNK_PRINT Serial // Defines the object that is used for printing
 // #define BLYNK_DEBUG        // Optional, this enables more detailed prints
-#define QMS_NODE1 // QMS_NODE1 or QMS_NODE2
+#define QMS_NODE2 // QMS_NODE1 or QMS_NODE2
 #define SECURE_CONN
 
 #ifdef QMS_NODE1
@@ -139,10 +139,11 @@ RTC_DATA_ATTR int bootCount = 0;
   SoftwareSerial ss(RXPin, TXPin);
   double lat;
   double lon;
+  int age; // fix age
   double prev_lat;
   double prev_lon;
   String latlon;
-  int sat_count=0;
+  uint8_t sat_count = 0;
 #else
   // kuching airport coordinate
   /* https://maps.googleapis.com/maps/api/geocode/json?latlng=1.449183,110.448915
@@ -357,7 +358,7 @@ void read_ads1115(){
   float ch1 = readChannel(ADS1115_COMP_1_GND);    
   float ch2 = readChannel(ADS1115_COMP_2_GND);    
   float ch3 = readChannel(ADS1115_COMP_3_GND);  
-  String ads_readout = "ch0: "+ String(ch0)+"V\t ch1: "+ String(ch1)+"V\t ch2: "+ String(ch2)+"V\t ch3: "+ String(ch3)+"V";
+  String ads_readout = "ch0: "+ String(ch0)+" V\t ch1: "+ String(ch1)+" V\t ch2: "+ String(ch2)+" V\t ch3: "+ String(ch3)+" V";
   Blynk.virtualWrite(V17, ads_readout);
 }
 
@@ -590,25 +591,29 @@ void blynk_tasks(){
     lcd.clear();
     lcd.setCursor(0, 0); // row 0, column 0
     if(deep_sleep_activated)
-      lcd.print("DS-ON  Sat:");
+      lcd.print("DS-ON  #Sat:");
     else
-      lcd.print("DS-OFF Sat:");
+      lcd.print("DS-OFF #Sat:");
     lcd.print(sat_count);
     lcd.setCursor(0, 1); // row 1, column 0
-    lcd.print(formatted_address);
+    // lcd.print(formatted_address);
+    lcd.print("Age:" + String(age) + " C:"+ String(currentCharsInt));
   }
 
   if(display_menu>5) display_menu = 0;
 
   Blynk.virtualWrite(V10, uptime_formatter::getUptime());
   Blynk.virtualWrite(V11, dateTime);  
+  Blynk.virtualWrite(V16, currentCharsInt);  // taken over restart_ts
   Blynk.virtualWrite(V18, formatted_address);
   Blynk.virtualWrite(V19, dummy_address_selection);
   Blynk.virtualWrite(V25, latlon);
+  // Blynk.virtualWrite(V26,(IS_PUSH_INTERVAL)/1000); // used above
+  Blynk.virtualWrite(V27, sat_count);
+  
   Blynk.virtualWrite(V40, busvoltage);
-  Blynk.virtualWrite(V41, shuntvoltage);
+  Blynk.virtualWrite(V41, age); // taken over shunt_voltage for GPS Fix Age
   Blynk.virtualWrite(V42, current_mA);
-
 
   /*
           "pHvalue_",
@@ -722,10 +727,10 @@ void blynk_tasks(){
 BLYNK_CONNECTED() {
   timeClient.setTimeOffset(28800);
   restart_ts = get_timestamp();
-  Blynk.syncVirtual(V0, V1, V2, V3, V4, V5, V6, V9);
+  Blynk.syncVirtual(V0, V1, V2, V3, V4, V5, V6, V7, V9);
   Blynk.virtualWrite(V12,WiFi.localIP().toString());
   Blynk.virtualWrite(V13,ssid);
-  Blynk.virtualWrite(V16, restart_ts); 
+  // Blynk.virtualWrite(V16, restart_ts); 
   Blynk.virtualWrite(V15,restartCounter);
   Blynk.virtualWrite(V14, "Woken up at "+ restart_ts);
 }
@@ -842,7 +847,6 @@ BLYNK_WRITE(V9){
   else          digitalWrite(lcd_backlight,LOW);
 }
 
-
 void GPS_HandlerTask(void * pvParameters) 
 {
   Serial.println("Initializing GPS on ESP32");
@@ -855,10 +859,19 @@ void GPS_HandlerTask(void * pvParameters)
 
      #ifdef GPS_AVAILABLE
       if(!dummy_gps){
-        lat = gps.location.lat();
-        lon = gps.location.lng();
+        if(gps.location.isValid()){
+          lat = gps.location.lat();
+          lon = gps.location.lng();
+          age = gps.location.age() / 1000;
+        }else{
+          // 1.5268747273617367, 110.36959144990605 Vivacity
+          lat = 1.5268747273617367;
+          lon = 110.36959144990605;
+          age = -1;
+        }
       }
-      sat_count       = gps.satellites.value();
+      if(gps.satellites.isValid())
+        sat_count = gps.satellites.value();
       currentCharsInt = gps.charsProcessed()/162;
 
       if(lat != 0 && lon != 0 && prev_lat!= lat && prev_lon != lon){
@@ -877,7 +890,7 @@ void GPS_HandlerTask(void * pvParameters)
       smartDelay(1000);
 
       // Serial.printf("Char: %d Found_Lat:%f Found_Lon:%f Sat:%d\n",currentCharsInt,lat,lon,sat_count);
-      latlon = "Lat:" + String(lat,4) + " " + "Lon:" + String(lon,4); // stringify coord for blynk write
+      latlon = "Coord: " + String(lat,4) + ", " + String(lon,4) + " Sat: #[" + sat_count + "] Age:" + age; // stringify coord for blynk write
   
       if (millis() > 5000 && gps.charsProcessed() < 10)
         Serial.println(F("No GPS data received: check wiring"));
@@ -892,7 +905,7 @@ void BLYNK_HandlerTask(void * pvParameters)
     timer.setInterval(1000L, printTimeRTC);
   #else
     timer.setInterval(1000L, blynk_tasks);
-    // timer.setInterval(5000L, read_ads1115);
+    timer.setInterval(5000L, read_ads1115);
     timer.setInterval(5000L, getINA219);
     timer.setInterval(5000L, get_tss_ph);
   #endif
