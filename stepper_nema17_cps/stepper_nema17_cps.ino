@@ -23,6 +23,7 @@ Adafruit_NeoPixel   strip_ring(RING_COUNT, RING_PIN, NEO_GRB + NEO_KHZ800);
 #define DELAY_100MS     100
 
 #define AUTO_CONTROL
+#define AUTO_DUMMY //  used for product features showcase
 // #define ENCODER_CONTROL
 // #define AUTO_LOOP
 // #define CNC_SHIELD // comment this out if not using CNC Shield
@@ -367,7 +368,11 @@ void setup() {
     // measureDistanceCm - Standard
     disable_stepper();
 
+    #ifdef AUTO_DUMMY
+    int distanceToObject = 140;
+    #else
     int distanceToObject = height_sensor.MeasureInCentimeters();
+    #endif
     int height_cm = (SENSOR_HEIGHT - distanceToObject) - height_offset ; // 200-50=150
     if(height_cm < 0) height_cm = 0;
     // Serial.print("[PRESENCE ULTRASONIC] State: ");
@@ -412,7 +417,11 @@ void setup() {
     
         do{
           distanceToObject = height_sensor.MeasureInCentimeters();
+          #ifdef AUTO_DUMMY
+          height_cm = 140;
+          #else
           height_cm = (SENSOR_HEIGHT - distanceToObject) - height_offset ; // 200-50=150
+          #endif
 
           if(height_cm < 140){
             byte low[4] = {_empty, _empty, _L, _O};
@@ -689,8 +698,11 @@ void running_BOTTOM_POS() {
       digitalWrite(PRESENCE_LED,0);
       personNotDetected();
     }
+    #ifdef AUTO_DUMMY
+    return 1;              
+    #else
     return presence_detected;              
-
+    #endif
  }
 
 void beep_once(){
