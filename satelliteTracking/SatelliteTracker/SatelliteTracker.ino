@@ -162,10 +162,10 @@ void loop()
           }
       }
       #ifdef ENABLE_LCD 
-      if((millis()/1000) % 2  == 0){
+      if(int(millis()/1000) % 3  == 0){
         lcd.setCursor(0,0);
-        lcd.print("Use:"+ String(gps.satellites.value()));
-        lcd.setCursor(6,0);
+        lcd.print("InUse:"+ String(gps.satellites.value()));
+        lcd.setCursor(8,0);
         lcd.print(" C:"+ String(currentCharsInt));
         lcd.setCursor(0,1);
         lcd.print("Active Sat#:"+ String(active_satellite));
