@@ -251,6 +251,23 @@ const char* remote_host = "blynk.cloud";
 float shuntvoltage;
 float busvoltage;
 float current_mA; 
+float co2_ch1_mV;
+float co2_ch2_mV;
+float co2_ch3_mV;
+int ch1_ppm;
+int ch2_ppm;
+int ch3_ppm;
+
+#define         DC_GAIN             (8.5)  // DC gain of amplifier 8500mV
+#define         _400PPM_MILLIVOLT   (30.0) // ADC out at 400ppm in mV
+#define         ZERO_POINT_VOLTAGE  (_400PPM_MILLIVOLT/1000/DC_GAIN)  //  Calc:  Vo = (ADC out mV)/DC_GAIN
+#define         REACTION_VOLTAGE    (0.03) // typically 30mV to 90mV 
+float           CO2Curve[3]         =  
+                                    {   
+                                        log10(400),
+                                        ZERO_POINT_VOLTAGE,
+                                        (REACTION_VOLTAGE/(log10(400)-log10(1000)))
+                                    }; 
 
 unsigned long previousMillis = 0;   // Stores last time temperature was published
 unsigned int interval = 60000;      // very long delay just to free up more CPU time
@@ -354,12 +371,42 @@ void getINA219(){
 }
 
 void read_ads1115(){
-  float ch0 = readChannel(ADS1115_COMP_0_GND);    
-  float ch1 = readChannel(ADS1115_COMP_1_GND);    
-  float ch2 = readChannel(ADS1115_COMP_2_GND);    
-  float ch3 = readChannel(ADS1115_COMP_3_GND);  
-  String ads_readout = "ch0: "+ String(ch0)+" V\t ch1: "+ String(ch1)+" V\t ch2: "+ String(ch2)+" V\t ch3: "+ String(ch3)+" V";
+  float ch0 = readChannel(ADS1115_COMP_0_GND);   // turbidity sensor   
+  float ch1 = readChannel(ADS1115_COMP_1_GND);   // V16 takeover from GPS char count
+  float ch2 = readChannel(ADS1115_COMP_2_GND);   // V41 takeover from GPS fix age
+  float ch3 = readChannel(ADS1115_COMP_3_GND);   // V27 takeover from Sat in Use
+  co2_ch1_mV = ch1;
+  co2_ch2_mV = ch2;
+  co2_ch3_mV = ch3;
+
+  ch1_ppm = get_CO2_ppm(co2_ch1_mV, CO2Curve);
+  ch2_ppm = get_CO2_ppm(co2_ch2_mV, CO2Curve);
+  ch3_ppm = get_CO2_ppm(co2_ch3_mV, CO2Curve);
+
+  /*
+  Heating Voltage = 6V +/- 0.1V
+  Heating Resistance = 30ohm +/- 5%
+  Heating Current = 200mA
+  Heating Power = 1200mW
+  Output voltage = 30mV - 50mV (350ppm-10,000ppm)
+
+  250-400ppm      Normal background concentration in outdoor ambient air
+  400-1,000ppm	  Concentrations typical of occupied indoor spaces with good air exchange
+  1,000-2,000ppm	Complaints of drowsiness and poor air.
+  2,000-5,000 ppm	Headaches, sleepiness and stagnant, stale, stuffy air. 
+                  Poor concentration, loss of attention, increased heart rate 
+                  and slight nausea may also be present.
+  5,000	          Workplace exposure limit (as 8-hour TWA) in most jurisdictions.
+  >40,000 ppm	    Exposure may lead to serious oxygen deprivation resulting 
+                  in permanent brain damage, coma, even death.
+  */
+
+ 
+  String ads_readout = "ch0: "+ String(ch0)+" mV ch1: "+ String(ch1_ppm,0)+" ppm ch2: "+ String(ch2_ppm)+" ppm ch3: "+ String(ch3_ppm)+" ppm";
   Blynk.virtualWrite(V17, ads_readout);
+  Blynk.virtualWrite(V16, ch1);
+  Blynk.virtualWrite(V27, ch2);
+  Blynk.virtualWrite(V41, ch3);
 }
 
 #define REFERENCE_1500mV 1500
@@ -520,7 +567,7 @@ float readChannel(ADS1115_MUX channel) {
   adc.setCompareChannels(channel);
   adc.startSingleMeasurement();
   while(adc.isBusy()){}
-  voltage = adc.getResult_V(); // alternative: getResult_mV for Millivolt
+  voltage = adc.getResult_mV(); // alternative: getResult_mV for Millivolt
   return voltage;
 }
 
@@ -587,6 +634,22 @@ void blynk_tasks(){
     lcd.setCursor(0, 1); // row 1, column 0
     lcd.print("TSS:"+ String(tss_mgl,3)+ " m/gl"); 
   }
+  else if(display_menu == 5){
+    lcd.clear();
+    if(int(millis()/1000) % 3 == 0){
+    lcd.setCursor(0, 0); // row 0, column 0
+    lcd.print("CO2: CH1|CH1|CH3");
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print("  "+String(co2_ch1_mV,1)+" "+String(co2_ch2_mV,1)+" "+String(co2_ch3_mV,1)); // XX:X XX:X XX:X 
+    }
+    else{
+    lcd.setCursor(0, 0); // row 0, column 0
+    lcd.print("PPM: CH1|CH1|CH3");
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print("    "+String(ch1_ppm)+" "+String(ch2_ppm)+" "+String(ch3_ppm)); // XX:X XX:X XX:X 
+    }
+
+  }
   else{
     lcd.clear();
     lcd.setCursor(0, 0); // row 0, column 0
@@ -600,19 +663,19 @@ void blynk_tasks(){
     lcd.print("Age:" + String(age) + " C:"+ String(currentCharsInt));
   }
 
-  if(display_menu>5) display_menu = 0;
+  if(display_menu>6) display_menu = 0;
 
   Blynk.virtualWrite(V10, uptime_formatter::getUptime());
   Blynk.virtualWrite(V11, dateTime);  
-  Blynk.virtualWrite(V16, currentCharsInt);  // taken over restart_ts
+  // Blynk.virtualWrite(V16, currentCharsInt);  // taken over restart_ts
   Blynk.virtualWrite(V18, formatted_address);
   Blynk.virtualWrite(V19, dummy_address_selection);
   Blynk.virtualWrite(V25, latlon);
   // Blynk.virtualWrite(V26,(IS_PUSH_INTERVAL)/1000); // used above
-  Blynk.virtualWrite(V27, sat_count);
+  // Blynk.virtualWrite(V27, sat_count);
   
   Blynk.virtualWrite(V40, busvoltage);
-  Blynk.virtualWrite(V41, age); // taken over shunt_voltage for GPS Fix Age
+  // Blynk.virtualWrite(V41, age); // taken over shunt_voltage for GPS Fix Age
   Blynk.virtualWrite(V42, current_mA);
 
   /*
@@ -1332,3 +1395,13 @@ void static_postData_csv() {
     payload_pushed = true;
   }
 } 
+
+int get_CO2_ppm(float volt_mV, float *pcurve)
+{
+    if ((volt_mV/1000/DC_GAIN )>=ZERO_POINT_VOLTAGE){
+        return -1;
+    } 
+    else{ 
+        return pow(10, ((volt_mV/1000/DC_GAIN)-pcurve[1])/pcurve[2]+pcurve[0]);
+    }
+}
