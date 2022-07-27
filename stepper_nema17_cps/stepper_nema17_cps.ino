@@ -23,7 +23,7 @@ Adafruit_NeoPixel   strip_ring(RING_COUNT, RING_PIN, NEO_GRB + NEO_KHZ800);
 #define DELAY_100MS     100
 
 #define AUTO_CONTROL
-#define AUTO_DUMMY //  used for product features showcase
+// #define AUTO_DUMMY //  used for product features showcase
 // #define ENCODER_CONTROL
 // #define AUTO_LOOP
 // #define CNC_SHIELD // comment this out if not using CNC Shield
@@ -415,7 +415,9 @@ void setup() {
         disp.scrollByte(read, 25);
         delay(DELAY_100MS);
     
+        byte retry = 0;
         do{
+          retry += 1;
           distanceToObject = height_sensor.MeasureInCentimeters();
           #ifdef AUTO_DUMMY
           height_cm = 140;
@@ -440,7 +442,7 @@ void setup() {
 
           disp.displayInt(height_cm);
           delay(DELAY_100MS);
-        } while(height_cm < 140 || height_cm > 200);
+        } while(height_cm < 140 || height_cm > 200 && retry<5);
 
         if(height_cm < 140) height_cm = 140;
         if(height_cm > 200) height_cm = 200;
