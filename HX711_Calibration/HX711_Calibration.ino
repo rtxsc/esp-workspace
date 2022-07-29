@@ -109,6 +109,10 @@ void calibrate(){
   disp.point(0);   
   disp.twistByte(cali, 25);
   delay(100);
+
+  byte clear_item[] = {_c, _l, _e, _a, _r, _empty, _o, _b, _j, _empty,};
+  disp.runningString(clear_item, sizeof(clear_item), 200);  
+
   Serial.println("Step 1 : Set scale with no parameter. DO NOT PLACE THE LOAD");
   scale.set_scale();
   Serial.println("Step 2 : Set tare with no parameter. DO NOT PLACE THE LOAD");
@@ -163,7 +167,8 @@ void calibrate(){
       Serial.print(String(min_expected) + " < w < " + String(max_expected));
       Serial.print(" not achieved [RETRY] getting (w):");
       Serial.println(w);
-      byte fail[4] = {_f, _a, _i, _l};
+      byte fail[4] = {_F, _a, _i, _L};
+      disp.clear();
       disp.point(0);   
       disp.twistByte(fail, 25); 
       delay(100);
