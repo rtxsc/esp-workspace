@@ -1,7 +1,7 @@
 #include "GyverTM1637.h" // for BIG VERSION
 #include "HX711.h"
-// #define LOADCELL_200KG
-#define LOADCELL_20KG
+#define LOADCELL_200KG
+// #define LOADCELL_20KG
 
 #ifdef LOADCELL_200KG
 #define ADC_NO_LOAD_200KG 62000 // min 63000 max

@@ -1,6 +1,6 @@
 #define INTERVAL_METHOD
  #define USE_TM1637 // comment this line if you dont have the display 
-//#define ENABLE_SERIAL_DEBUG
+#define ENABLE_SERIAL_DEBUG
 
 #ifdef USE_TM1637
 #include <TM1637Display.h>
@@ -11,7 +11,7 @@
 #define ELAPSE_ONE_SECOND   1000
 #define MINUTE_PER_HOUR     60
 #define TICKS_PER_MINUTE    60
-#define DIVISOR             2 // higher = faster update rate (need more magnets for better precision)
+#define DIVISOR             1 // higher = faster update rate (need more magnets for better precision)
 #define MAGNET_COUNT        20 // set your number of magnets here
 
 #define pi 3.141592653589793238
@@ -21,10 +21,13 @@ TM1637Display display(CLK, DIO);
 #endif
 
 const byte ledPin = 13;
-const byte interruptPin = 2;
+const byte button = 2;
+const byte interruptPin = 3;
 volatile byte state = LOW;
-volatile int tick = 0;
-volatile int ticks_per_sec = 0;
+volatile uint32_t tick = 0;
+volatile uint32_t ticks_per_sec = 0;
+volatile uint8_t DIVISOR_VALUE = 1;
+uint8_t divi[] = { 0xff };
 
 
 long startMillis;
@@ -48,7 +51,9 @@ const uint8_t SEG_DONE[] = {
 
 void setup() {
   pinMode(ledPin, OUTPUT);
+  pinMode(button, INPUT_PULLUP);
   pinMode(interruptPin, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(button), get_button_press, FALLING);
   attachInterrupt(digitalPinToInterrupt(interruptPin), get_tick, FALLING);
   Serial.begin(115200);
   Serial.println("Speedometer Test using Arduino");
@@ -64,7 +69,7 @@ void setup() {
   delay(500);
 
   for(k=0; k <= 4; k++) {
-    display.showNumberDecEx(0, (0x80 >> k), true);
+    display.showNumberDecEx((k+1)*1111, (0x80 >> k), true);
     delay(100);
   }
   #endif
@@ -79,8 +84,12 @@ void loop() {
 
   #ifdef INTERVAL_METHOD
 
-  if(millis()-startMillis >= ELAPSE_ONE_SECOND/DIVISOR){
-    ticks_per_sec = (tick * DIVISOR);
+  if(DIVISOR_VALUE > 10) DIVISOR_VALUE = 1;
+  divi[0] = display.encodeDigit(DIVISOR_VALUE);
+  // display.setSegments(divi);
+
+  if(millis()-startMillis >= ELAPSE_ONE_SECOND/DIVISOR_VALUE){
+    ticks_per_sec = (tick * DIVISOR_VALUE);
     dist += ticks_per_sec * circf / 1000; // distance in km
 
     rpm = (ticks_per_sec * TICKS_PER_MINUTE ) / MAGNET_COUNT; // 1 tick / sec =  60 ticks per minute
@@ -109,7 +118,9 @@ void loop() {
     */
 
    #ifdef ENABLE_SERIAL_DEBUG
-    Serial.print("Tick:");
+    Serial.print("Divisor:");
+    Serial.print(DIVISOR_VALUE);
+    Serial.print("\tTick:");
     Serial.print(tick);
     Serial.print("\tTick/sec:");
     Serial.print(ticks_per_sec);
@@ -122,8 +133,10 @@ void loop() {
     Serial.println(" km/h");
     #endif
 
+    int speed_int = (DIVISOR_VALUE*1000) + int(speed_kmh);
+
     #ifdef USE_TM1637
-    display.showNumberDecEx(speed_kmh*10, (0x80 >> 2), false);
+    display.showNumberDecEx(speed_int, (0x80 >> 0), true);
     #endif
 
     tick = 0; // reset tick to zero
@@ -182,4 +195,8 @@ void loop() {
 void get_tick() {
 //  state = !state;
   tick++;
+}
+
+void get_button_press(){
+  DIVISOR_VALUE++;
 }

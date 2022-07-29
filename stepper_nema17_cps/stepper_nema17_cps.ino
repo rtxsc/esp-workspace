@@ -579,11 +579,11 @@ void setup() {
       colorWipe(strip.Color(  0,   0, 255), 10); // Blue
       beep_twice(); // abnormally low
     }
-    else if(head_temp >= 35 && head_temp <= 37){
+    else if(head_temp >= 35 && head_temp < 37.5){
       colorWipe(strip.Color(  0, 255,   0), 10); // Green
       beep_once(); // normal
     }  
-    else if(head_temp >= 37 && head_temp <= 39){
+    else if(head_temp >= 37.5 && head_temp <= 39){
       colorWipe(strip.Color(128,   0,   0), 10); // Light Red
       beep_thrice(); // above normal
     } 
