@@ -28,7 +28,7 @@ volatile byte state = LOW;
 volatile uint16_t tick = 0;
 volatile uint32_t ticks_per_sec = 0;
 volatile uint32_t rpm = 0;
-
+uint32_t avg_rpm = 0;
 byte DIVISOR_VALUE = 1;
 byte HOLES_COUNT   = 20 ; // set your number of magnets here
 
@@ -41,7 +41,13 @@ uint16_t max_read = 0;
 bool minimum_obtained = false;
 bool maximum_obtained = false;
 
-int speed_sum;
+
+const int numReadings = 10;
+
+int readings[numReadings];      // the readings from the analog input
+int readIndex = 0;              // the index of the current reading
+int total = 0;                  // the running total
+int average = 0;                // the average
 
 
 long startMillis;
@@ -99,6 +105,9 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(button), get_button_press, FALLING);
   attachInterrupt(digitalPinToInterrupt(interruptPin), get_tick, FALLING);
   Serial.begin(115200);
+  for (int thisReading = 0; thisReading < numReadings; thisReading++) {
+    readings[thisReading] = 0;
+  }
   for(int x = 0; x < 50; x++) Serial.println();
   Serial.println("Speedometer Test using Arduino");
   startMillis = millis(); // start ticker
@@ -188,14 +197,9 @@ void loop() {
   } // ATOMIC END
 
     rpm = (ticks_per_sec * TICKS_PER_MINUTE ) / HOLES_COUNT; // 1 tick / sec =  60 ticks per minute
-    speed_kmh = (rpm * circf * MINUTE_PER_HOUR) / 1000;
+    avg_rpm = smoothing_rpm(rpm);
+    speed_kmh = (avg_rpm * circf * MINUTE_PER_HOUR) / 1000;
     speed_kmh = round(speed_kmh);
-    byte arraySize = DIVISOR_VALUE*5;
-    for(byte i=0; i < arraySize; i++){
-      speed_sum += speed_kmh;
-    }
-    speed_kmh = speed_sum / arraySize;
-    speed_sum = 0;
     tick = 0; // reset tick to zero
 
     #ifdef USE_TM1637
@@ -282,7 +286,7 @@ void drive_motor(){
     idle_checked = true;
   }
   else{
-    if((read_throttle < min_read + 20) && tick ==0){
+    if((read_throttle < min_read + 50) && tick ==0){
       idle_checked = false;
     }else{
       analogWrite(M1A, mapped_throttle);
@@ -371,3 +375,22 @@ void beep_thrice(){
   tone(8, 1500, 50);
   delay(100);
 }
+
+int smoothing_rpm(int rpm){
+   // subtract the last reading:
+    total = total - readings[readIndex];
+    // read from the sensor:
+    readings[readIndex] = rpm;
+    // add the reading to the total:
+    total = total + readings[readIndex];
+    // advance to the next position in the array:
+    readIndex = readIndex + 1;
+    // if we're at the end of the array...
+    if (readIndex >= numReadings) {
+      // ...wrap around to the beginning:
+      readIndex = 0;
+    }
+    // calculate the average:
+    avg_rpm = total / numReadings; // average rpm
+    return avg_rpm;
+    }
