@@ -1,4 +1,4 @@
-#define SMART_EXTENSION
+// #define SMART_EXTENSION
 
 #define BLYNK_PRINT Serial
 
@@ -31,12 +31,15 @@ extern "C"
 }
 
 char auth[] = BLYNK_AUTH_TOKEN;
+#ifdef SMART_EXTENSION
 char ssid[] = "NPRDC CELCOM M1"; // iPhone 12 Pro Max
 char pass[] = "nprdc1234";
+#else
 // char ssid[] = "iPhone 12 Pro Max"; // iPhone 12 Pro Max
 // char pass[] = "robotronix";
-// char ssid[] = "MaxisONE Fibre 2.4G"; // iPhone 12 Pro Max
-// char pass[] = "respironics";
+char ssid[] = "MaxisONE Fibre 2.4G"; // iPhone 12 Pro Max
+char pass[] = "respironics";
+#endif
 const char* remote_host = "blynk.cloud";
 
 #define LED_BUILTIN2  2
