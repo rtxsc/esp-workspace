@@ -29,8 +29,9 @@ volatile uint16_t tick = 0;
 volatile uint32_t ticks_per_sec = 0;
 volatile uint32_t rpm = 0;
 uint32_t avg_rpm = 0;
+uint32_t prev_rpm = 0 ;
 byte DIVISOR_VALUE = 1;
-byte HOLES_COUNT   = 20 ; // set your number of magnets here
+uint8_t HOLES_COUNT   = 20 ; // set your number of magnets here
 
 #define M1A 5
 #define THROTTLE 0
@@ -42,9 +43,8 @@ bool minimum_obtained = false;
 bool maximum_obtained = false;
 
 
-const int numReadings = 10;
-
-int readings[numReadings];      // the readings from the analog input
+const uint8_t read_size = 8;
+int array_storage[read_size];      // the array_storage from the analog input
 int readIndex = 0;              // the index of the current reading
 int total = 0;                  // the running total
 int average = 0;                // the average
@@ -55,12 +55,34 @@ double speed_kmh = 0.0;
 double speed2_kmh = 0.0;
 bool idle_checked = false;
 long checkIdle = 0;
-// r = 0.25 m for motorcycle 16 inch rim
-float r = 0.203; // 5.6 cm or 0.056m (fan) /// 3.3cm or 0.033m (HDD 2.5") // 352mm for SunDing
-float circf = 2 * pi * r; // 0.3518583772 meter
+// default to 0278
+// r =  motorcycle 17 inch rim (55.78 cm diameter / 27.89 cm radius / 0.28m radius)
+double r = 0.278; // 5.6 cm or 0.056m (fan) /// 3.3cm or 0.033m (HDD 2.5") // 352mm for SunDing
+float circf = 0;
 float dist = 0.0;
 
 #ifdef USE_TM1637
+
+const uint8_t SEG_RAD[] = {
+	SEG_E | SEG_G ,                                  // R
+	SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_G,   // a
+	SEG_B | SEG_C | SEG_D | SEG_E | SEG_G,           // d
+	SEG_B | SEG_C                                    // I
+	};
+
+  const uint8_t SEG_YES[] = {
+    SEG_B | SEG_C | SEG_D | SEG_F | SEG_G,           // Y
+	  SEG_A | SEG_B | SEG_D | SEG_E | SEG_F | SEG_G,   // e
+	  SEG_A | SEG_C | SEG_D | SEG_F | SEG_G,            // S
+    SEG_D
+	};
+
+  const uint8_t SEG_NO[] = {
+    SEG_D,
+    SEG_D,
+	  SEG_C | SEG_E | SEG_G,                           // n
+	  SEG_C | SEG_D | SEG_E | SEG_G                    // o
+	};
 
 const uint8_t SEG_INIT[] = {
 	SEG_B | SEG_C ,                                  // I
@@ -105,9 +127,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(button), get_button_press, FALLING);
   attachInterrupt(digitalPinToInterrupt(interruptPin), get_tick, FALLING);
   Serial.begin(115200);
-  for (int thisReading = 0; thisReading < numReadings; thisReading++) {
-    readings[thisReading] = 0;
-  }
+  reset_array();  
   for(int x = 0; x < 50; x++) Serial.println();
   Serial.println("Speedometer Test using Arduino");
   startMillis = millis(); // start ticker
@@ -136,18 +156,53 @@ void setup() {
   beep_once();
   while(millis()- startTime < 2000){
       if(DIVISOR_VALUE % 2 == 0){
-        display.setSegments(SEG_H020);
-        HOLES_COUNT = 20 ;
-      }
-      else{
         display.setSegments(SEG_H100);
         HOLES_COUNT = 100 ;
       }
+      else{
+        display.setSegments(SEG_H020);
+        HOLES_COUNT = 20 ;
+      }
   }
+  display.setSegments(SEG_RAD);
+  delay(1000);
+  bool set_radius = false;
+
+  for(int i=0; i<5; i++){
+      Serial.print(5-i);
+      Serial.print(" ");
+      // display.showNumberDecEx(5-i, (0x80 >> 0), true);
+      if(DIVISOR_VALUE % 2 == 0){
+        Serial.println("Set Radius");
+        display.setSegments(SEG_YES);
+        set_radius = true;
+      }
+      else{
+        Serial.println("Do Not Set Radius");
+        display.setSegments(SEG_NO);
+        set_radius = false;
+      }
+      delay(250);
+    }
+  
+  if(set_radius){
+    r = config_radius();
+    Serial.print("confirmed new radius:");
+    Serial.print(r,3);
+  }
+  else{
+    Serial.print("default radius:");
+    Serial.print(r,3);
+  }
+  circf = 2 * pi * r; 
+
+  Serial.print("\tconfirmed circumference:");
+  Serial.print(circf*1000);
+  Serial.println(" mm");
   DIVISOR_VALUE = 1; // reset back for DIVISOR_VALUE actual purpose
+
+
   calibrate();
-
-
 }
 
 void loop() {
@@ -193,22 +248,19 @@ void loop() {
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
   /* --- ATOMIC NOT UTILIZED --- */
     ticks_per_sec = (tick * DIVISOR_VALUE);
-    dist += ticks_per_sec * circf / 1000; // distance in km
+    dist += (ticks_per_sec * circf / 1000) / HOLES_COUNT; // distance in km
   } // ATOMIC END
 
     rpm = (ticks_per_sec * TICKS_PER_MINUTE ) / HOLES_COUNT; // 1 tick / sec =  60 ticks per minute
     avg_rpm = smoothing_rpm(rpm);
     speed_kmh = (avg_rpm * circf * MINUTE_PER_HOUR) / 1000;
-    speed_kmh = round(speed_kmh);
-    tick = 0; // reset tick to zero
 
     #ifdef USE_TM1637
     int speed_int = (DIVISOR_VALUE*1000) + int(speed_kmh);
-
     display.showNumberDecEx(speed_int, (0x80 >> 0), true);
     #endif
+    tick = 0; // reset tick to zero
     startMillis = millis(); // reset millis()
-
   }
 
   #else
@@ -375,22 +427,122 @@ void beep_thrice(){
   tone(8, 1500, 50);
   delay(100);
 }
+void reset_array(){
+  for (int thisReading = 0; thisReading < read_size; thisReading++) {
+    array_storage[thisReading] = 0;
+  }
+}
 
 int smoothing_rpm(int rpm){
-   // subtract the last reading:
-    total = total - readings[readIndex];
-    // read from the sensor:
-    readings[readIndex] = rpm;
-    // add the reading to the total:
-    total = total + readings[readIndex];
-    // advance to the next position in the array:
+    total = total - array_storage[readIndex];
+    array_storage[readIndex] = rpm;
+    total = total + array_storage[readIndex];
     readIndex = readIndex + 1;
-    // if we're at the end of the array...
-    if (readIndex >= numReadings) {
-      // ...wrap around to the beginning:
+    if (readIndex >= read_size) {
       readIndex = 0;
     }
-    // calculate the average:
-    avg_rpm = total / numReadings; // average rpm
+    avg_rpm = total / read_size; // average rpm
     return avg_rpm;
+}
+
+double config_radius(){
+    uint8_t data[] = { 0x00, 0x00, 0x00, 0x00 };
+    uint8_t blank[] = { 0x00, 0x00, 0x00, 0x00 };
+
+    byte digit0 = 0, digit1 = 0, digit2 = 0, digit3 = 0;
+    bool confirm_digit0 = false;
+    bool confirm_digit1 = false;
+    bool confirm_digit2 = false;
+    bool confirm_digit3 = false;
+
+    while(1){
+
+        while(!confirm_digit0){
+          int read_throttle = analogRead(THROTTLE);
+          if(read_throttle > 500) confirm_digit0 = true;
+          else confirm_digit0 = false;
+
+          if(!digitalRead(button)) digit0++;
+          if(digit0 > 9) digit0 = 0;
+          data[0] = display.encodeDigit(digit0);
+          display.setSegments(data);
+          delay(100);
+          display.setSegments(blank);
+          delay(100);
+
+        }
+        beep_twice();
+        data[0] = display.encodeDigit(digit0);
+        display.setSegments(data);
+        Serial.println("digit 0 confirmed!");
+        delay(1000);
+
+        while(!confirm_digit1){
+          int read_throttle = analogRead(THROTTLE);
+          if(read_throttle > 500) confirm_digit1 = true;
+          else confirm_digit1 = false;
+          if(!digitalRead(button)) digit1++;
+          if(digit1 > 9) digit1 = 0;
+          data[1] = display.encodeDigit(digit1);
+          display.setSegments(data);
+          delay(100);
+          display.setSegments(blank);
+          delay(100);
+   
+        }
+        beep_twice();
+        data[0] = display.encodeDigit(digit0);
+        data[1] = display.encodeDigit(digit1);
+        display.setSegments(data);        
+        Serial.println("digit 1 confirmed!");
+      
+        delay(1000);
+        while(!confirm_digit2){
+          int read_throttle = analogRead(THROTTLE);
+          if(read_throttle > 500) confirm_digit2 = true;
+          else confirm_digit2 = false;
+
+          if(!digitalRead(button)) digit2++;
+          if(digit2 > 9) digit2 = 0;
+          data[2] = display.encodeDigit(digit2);
+          display.setSegments(data);
+          delay(100);
+          display.setSegments(blank);
+          delay(100);
+
+        }
+        beep_twice();
+        data[0] = display.encodeDigit(digit0);
+        data[1] = display.encodeDigit(digit1);
+        data[2] = display.encodeDigit(digit2);
+        display.setSegments(data);
+        Serial.println("digit 2 confirmed!");
+        
+        delay(1000);
+        while(!confirm_digit3){
+          int read_throttle = analogRead(THROTTLE);
+          if(read_throttle > 500) confirm_digit3 = true;
+          else confirm_digit3 = false;
+
+          if(!digitalRead(button)) digit3++;
+          if(digit3 > 9) digit3 = 0;
+          data[3] = display.encodeDigit(digit3);
+          display.setSegments(data);
+          delay(100);
+          display.setSegments(blank);
+          delay(100);
+
+        }
+        beep_thrice();
+        data[0] = display.encodeDigit(digit0);
+        data[1] = display.encodeDigit(digit1);
+        data[2] = display.encodeDigit(digit2);
+        data[3] = display.encodeDigit(digit3);
+        Serial.println("digit 3 confirmed!");
+        display.setSegments(data);
+        delay(100);
+
+        double rad = (digit0*1000 + digit1*100 + digit2*10 + digit3)/1000.0;
+        return rad;
     }
+}
