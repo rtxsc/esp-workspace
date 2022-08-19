@@ -56,7 +56,7 @@ long          motion_started_ts     = 0;
 long          motion_elapse_sec     = 0;
 long          motion_elapse         = 0;
 long          motion_timeout_sec    = 0;
-int           motion_hold           = 10;
+int           motion_hold           = 3600;
 int           retry_count           = 0;
 
 unsigned long lastMsg               = 0;
