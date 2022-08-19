@@ -44,7 +44,7 @@ bool maximum_obtained = false;
 
 
 const uint8_t read_size = 8;
-int array_storage[read_size];      // the array_storage from the analog input
+int array_storage[read_size];   // the array_storage from the analog input
 int readIndex = 0;              // the index of the current reading
 int total = 0;                  // the running total
 int average = 0;                // the average
