@@ -2,10 +2,24 @@
 #include <esp_wifi.h>
 #include <WiFi.h>
 
-// Set your Board ID (ESP32 Sender #1 = BOARD_ID 1, ESP32 Sender #2 = BOARD_ID 2, etc)
-#define BOARD_ID    0x03  // DO NOT FORGET TO CHANGE THIS ID either 0x01 (client1) or 0x02 (client2) or 0x03 (client3)
-#define LED         0x03 // 0x02 if ESP01/ESP32 | 0x03 if ESP32-C3
+// #define ESP32C3
 
+// Set your Board ID (ESP32 Sender #1 = BOARD_ID 1, ESP32 Sender #2 = BOARD_ID 2, etc)
+#ifdef ESP32C3
+  #define BOARD_ID    0x03   
+  #define LED         19    // 19 if ESP32-C3
+  #define RED         0x03 // 0x03 if ESP32-C3
+  #define GRN         0x04 // 0x04 if ESP32-C3
+  #define BLU         0x05 // 0x05 if ESP32-C3
+#else
+  #define BOARD_ID    0x02  // DO NOT FORGET TO CHANGE THIS ID either 0x01 (client1) or 0x02 (client2)
+  #define LED         0x02  // 0x02 if ESP01/ESP32 
+  #define RED         23    // 23 NOT USED (JUST DUMMY)
+  #define GRN         18 
+  #define BLU         19 
+#endif
+
+bool send_success = false;
 //MAC Address of the receiver AC:67:B2:25:85:78 (this is the AFS server - THE ONLY ONE SERVER)
 uint8_t serverAddress[] = {0xAC, 0x67, 0xB2, 0x25, 0x85, 0x78};
 
@@ -52,16 +66,22 @@ int32_t getWiFiChannel(const char *ssid) {
 
 // callback when data is sent
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
- Serial.print("\r\nBoard ID:");
+ Serial.print("\n\nBoard ID:");
  Serial.println(BOARD_ID,HEX);
-  Serial.print("\r\nLast Packet Send Status:\t");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+  Serial.print("Last Packet Send Status:");
+  if(status == ESP_NOW_SEND_SUCCESS)  send_success = true;
+  else                                send_success = false;
+  // ESP_NOW_SEND_SUCCESS = "Delivery Success"  ||   ESP_NOW_SEND_FAIL = "Delivery Fail"
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "[Delivery Success]" : "[Delivery Fail]");
 }
  
 void setup() {
   //Init Serial Monitor
   Serial.begin(115200);
   pinMode(LED,OUTPUT);
+  pinMode(RED,OUTPUT);
+  pinMode(GRN,OUTPUT);
+  pinMode(BLU,OUTPUT);
 
   // Set device as a Wi-Fi Station and set channel
   WiFi.mode(WIFI_STA);
@@ -99,6 +119,10 @@ void setup() {
     return;
   }
   digitalWrite(LED, LOW); // reset the LED to OFF initially (not using the state of pin at the moment 25.03.2022)
+  digitalWrite(RED, LOW); // reset the LED to OFF initially (not using the state of pin at the moment 25.03.2022)
+  digitalWrite(GRN, LOW); // reset the LED to OFF initially (not using the state of pin at the moment 25.03.2022)
+  digitalWrite(BLU, LOW); // reset the LED to OFF initially (not using the state of pin at the moment 25.03.2022)
+
 }
 
 // callback function that will be executed when data is received
@@ -131,16 +155,30 @@ void loop() {
     myData.payload_id = payload_id++;
      
     //Send message via ESP-NOW
-    esp_now_send_status_t status;
     esp_err_t result = esp_now_send(serverAddress, (uint8_t *) &myData, sizeof(myData));
     Serial.print("Result (esp_err_t):"); Serial.println(result); 
-    Serial.print("Status (esp_now_send_status_t):"); Serial.println(status); 
 
-    if (result == ESP_OK) {
+    if (result == ESP_OK && send_success) {
       Serial.println("Sent with success");
+      digitalWrite(BLU, HIGH); 
+      delay(50);
     }
     else {
       Serial.println("Error sending the data");
+      #ifdef ESP32C3
+      digitalWrite(RED, HIGH);
+      #else
+      digitalWrite(GRN, HIGH);
+      #endif
+      delay(50);
+
     }
   }
+  digitalWrite(BLU, LOW);
+  #ifdef ESP32C3 
+  digitalWrite(RED, LOW); 
+  #else
+  digitalWrite(GRN, LOW); 
+  #endif
+
 }

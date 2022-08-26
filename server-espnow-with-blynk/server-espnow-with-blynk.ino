@@ -107,18 +107,23 @@ String dt1 = "None";
 float temp1 = 0;
 float humi1 = 0;
 uint16_t read_id1 = 0;
+uint16_t prev_read_id1 = 0;
 
 String jsonString2 = "None";
 String dt2 = "None";
 float temp2 = 0;
 float humi2 = 0;
 uint16_t read_id2 = 0;
+uint16_t prev_read_id2 = 0;
+
 
 String jsonString3 = "None";
 String dt3 = "None";
 float temp3 = 0;
 float humi3 = 0;
 uint16_t read_id3 = 0;
+uint16_t prev_read_id3 = 0;
+
 
 float shuntvoltage;
 float busvoltage;
@@ -129,6 +134,13 @@ unsigned int interval = 60000;      // very long delay just to free up more CPU 
 bool esp_now_initialized = false;
 int display_menu = 0;
 bool display_static = false;
+
+int num_active_peers = 0;
+uint8_t peer1 = 0;
+uint8_t peer2 = 0;
+uint8_t peer3 = 0;
+bool get_millis = false;
+long startTime;
 
 // MAC Address of the receiver #1 => 9c:9c:1f:c5:94:24 (ESP01-client-1)
 uint8_t client1_mac[] = {0x9C, 0x9C, 0x1F, 0xC5, 0x94, 0x24};
@@ -161,6 +173,7 @@ struct_message incomingReadings;
 typedef struct struct_control {
     int control;
 } struct_control;
+
 
 //Create a struct_message called sendControl
 struct_control sendControl;
@@ -266,11 +279,11 @@ void blynk_tasks(){
     lcd.clear();
     lcd.setCursor(0, 0); // row 0, column 0
     lcd.print("1:"+ String(read_id1)); // 1:XXXXX 2:XXXXX
-    lcd.setCursor(8, 0); // row 0, column 0
+    lcd.setCursor(9, 0); // row 0, column 0
     lcd.print("2:" + String(read_id2));
     lcd.setCursor(0, 1); // row 1, column 0
     lcd.print("3:"+ String(read_id3));
-    lcd.setCursor(8, 1); // row 1, column 0
+    lcd.setCursor(9, 1); // row 1, column 0
     lcd.print("4:"+ String(read_id3*2));
   }
   else{
@@ -428,16 +441,35 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 
 // callback function that will be executed when data is received
 void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) { 
+
+  if(!get_millis){
+    startTime = millis();
+    get_millis = true;
+  }
+
+  if(millis()-startTime > 5000){
+    num_active_peers = 0;
+    get_millis = false;
+  }
   // Copies the sender mac address to a string
   char macStr[18];
   Serial.print("Packet received from: ");
   snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
            mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-  // Serial.println(macStr);
-  if(strcmp(macStr, client1_cchar) == 0)      Serial.println("Client ID 1");
-  else if(strcmp(macStr, client2_cchar) == 0) Serial.println("Client ID 2");
-  else if(strcmp(macStr, client3_cchar) == 0) Serial.println("Client ID 3");
-  else                                        Serial.println("Unknown Client! Check client's MAC");
+  // Serial.println(macStr); // UNCOMMENT THIS TO FIGURE OUT THE CLIENT'S MAC 27.08.2022
+  if(strcmp(macStr, client1_cchar) == 0)      
+  {
+    Serial.println("Client ID 1");
+  }
+  if(strcmp(macStr, client2_cchar) == 0) 
+  {
+    Serial.println("Client ID 2");
+  }
+  if(strcmp(macStr, client3_cchar) == 0) 
+  {
+    Serial.println("Client ID 3");
+  }
+  // Serial.println("Unknown Client! Check client's MAC");
 
   memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
 
@@ -447,6 +479,7 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
   board["t"] = incomingReadings.temp; 
   board["h"] = incomingReadings.humi; 
 
+
   if(incomingReadings.id == 1){
     temp1 = incomingReadings.temp;
     humi1 = incomingReadings.humi;
@@ -454,23 +487,52 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     dt1 = get_timestamp();
     jsonString1 = JSON.stringify(board);
   }
-  else if(incomingReadings.id == 2){
+  if(prev_read_id1 != read_id1){
+    num_active_peers++;
+    prev_read_id1 = read_id1;
+  }
+
+  if(incomingReadings.id == 2){
     temp2 = incomingReadings.temp;
     humi2 = incomingReadings.humi;
     read_id2 = incomingReadings.readingId;
     dt2 = get_timestamp();
     jsonString2 = JSON.stringify(board);
   }
-  else if(incomingReadings.id == 3){
+  if(prev_read_id2 != read_id2){
+    num_active_peers++;
+    prev_read_id2 = read_id2;
+  } 
+
+  if(incomingReadings.id == 3){
     temp3 = incomingReadings.temp;
     humi3 = incomingReadings.humi;
     read_id3 = incomingReadings.readingId;
     dt3 = get_timestamp();
     jsonString3 = JSON.stringify(board);
   }
-  else{
-    Serial.println("No payload received");
+  if(prev_read_id3 != read_id3){
+    num_active_peers++;
+    prev_read_id3 = read_id3;
   }
+
+
+  // else{
+  //   Serial.println("No payload received");
+  // }
+
+  // esp_err_t esp_now_get_peer_num(esp_now_peer_num_t *num)
+  esp_now_peer_num_t pn;
+  esp_now_get_peer_num(&pn);
+  if(num_active_peers < 0 ) num_active_peers = 0;
+  if(num_active_peers > pn.total_num) num_active_peers = pn.total_num;
+
+  Serial.print("\tTotal registered peers:");
+  Serial.print(pn.total_num);
+  Serial.print("\tActive peers:");
+  Serial.println(num_active_peers);
+
+
 }
 
 void ESPNOW_HandlerTask(void * pvParameters) 
@@ -526,6 +588,8 @@ void ESPNOW_HandlerTask(void * pvParameters)
     Serial.println("Failed to add peer client ID 3");
     return;
   }
+
+  // esp_now_peer_num_t 
   // coming from client-side code end ----------------------------------------------------------
 
   // leave this empty to reserve more CPU resources for other intensive tasks    
