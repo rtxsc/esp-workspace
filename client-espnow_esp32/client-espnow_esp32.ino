@@ -3,8 +3,8 @@
 #include <WiFi.h>
 
 // Set your Board ID (ESP32 Sender #1 = BOARD_ID 1, ESP32 Sender #2 = BOARD_ID 2, etc)
-#define BOARD_ID    0x02  // DO NOT FORGET TO CHANGE THIS ID either 0x01 (client1) or 0x02 (client2)
-#define LED         0x02
+#define BOARD_ID    0x03  // DO NOT FORGET TO CHANGE THIS ID either 0x01 (client1) or 0x02 (client2) or 0x03 (client3)
+#define LED         0x03 // 0x02 if ESP01/ESP32 | 0x03 if ESP32-C3
 
 //MAC Address of the receiver AC:67:B2:25:85:78 (this is the AFS server - THE ONLY ONE SERVER)
 uint8_t serverAddress[] = {0xAC, 0x67, 0xB2, 0x25, 0x85, 0x78};
@@ -15,7 +15,6 @@ typedef struct struct_message {
     int id;
     float temp;
     float humi;
-    int randomNum;
     int payload_id;
 } struct_message;
 
@@ -53,7 +52,7 @@ int32_t getWiFiChannel(const char *ssid) {
 
 // callback when data is sent
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
- Serial.print("\r\nBoard ID:\t");
+ Serial.print("\r\nBoard ID:");
  Serial.println(BOARD_ID,HEX);
   Serial.print("\r\nLast Packet Send Status:\t");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
@@ -129,11 +128,14 @@ void loop() {
     myData.id = BOARD_ID;
     myData.temp = random(20,50);
     myData.humi = random(50,100);
-    myData.randomNum = random(0,14);
     myData.payload_id = payload_id++;
      
     //Send message via ESP-NOW
+    esp_now_send_status_t status;
     esp_err_t result = esp_now_send(serverAddress, (uint8_t *) &myData, sizeof(myData));
+    Serial.print("Result (esp_err_t):"); Serial.println(result); 
+    Serial.print("Status (esp_now_send_status_t):"); Serial.println(status); 
+
     if (result == ESP_OK) {
       Serial.println("Sent with success");
     }

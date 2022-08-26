@@ -106,22 +106,19 @@ String jsonString1 = "None";
 String dt1 = "None";
 float temp1 = 0;
 float humi1 = 0;
-int random1 = 0;
-int read_id1 = 0;
+uint16_t read_id1 = 0;
 
 String jsonString2 = "None";
 String dt2 = "None";
 float temp2 = 0;
 float humi2 = 0;
-int random2 = 0;
-int read_id2 = 0;
+uint16_t read_id2 = 0;
 
 String jsonString3 = "None";
 String dt3 = "None";
 float temp3 = 0;
 float humi3 = 0;
-int random3 = 0;
-int read_id3 = 0;
+uint16_t read_id3 = 0;
 
 float shuntvoltage;
 float busvoltage;
@@ -131,20 +128,21 @@ unsigned long previousMillis = 0;   // Stores last time temperature was publishe
 unsigned int interval = 60000;      // very long delay just to free up more CPU time
 bool esp_now_initialized = false;
 int display_menu = 0;
+bool display_static = false;
 
 // MAC Address of the receiver #1 => 9c:9c:1f:c5:94:24 (ESP01-client-1)
 uint8_t client1_mac[] = {0x9C, 0x9C, 0x1F, 0xC5, 0x94, 0x24};
-String client1_mac_string = "9c:9c:1f:c5:94:24";
+String client1_mac_string = "9c:9c:1f:c5:94:24"; // must be lowercase 27.08.2022 Sat
 const char* client1_cchar = client1_mac_string.c_str();
 
 // MAC Address of the receiver #2 => 9c:9c:1f:e3:85:3c (ESP01-client-2)
 uint8_t client2_mac[] = {0x9C, 0x9C, 0x1F, 0xE3, 0x85, 0x3C};
-String client2_mac_string = "9c:9c:1f:e3:85:3c";
+String client2_mac_string = "9c:9c:1f:e3:85:3c"; // must be lowercase 27.08.2022 Sat
 const char* client2_cchar = client2_mac_string.c_str();
 
-// MAC Address of the receiver #3 DC:4F:22:18:EA:45 (ESP8266 Client - 29.04.2022)
-uint8_t client3_mac[] = {0xDC, 0x4F, 0x22, 0x18, 0xEA, 0x45};
-String client3_mac_string = "DC:4F:22:18:EA:45";
+// MAC Address of the receiver #3  7C:DF:A1:AF:AA:B4 (ESP32-C3 26.08.2022)
+uint8_t client3_mac[] = {0x7C, 0xDF, 0xA1, 0xAF, 0xAA, 0xB4};
+String client3_mac_string = "7c:df:a1:af:aa:b4"; // must be lowercase 27.08.2022 Sat
 const char* client3_cchar = client3_mac_string.c_str();
 
 // Structure example to receive data
@@ -153,7 +151,6 @@ typedef struct struct_message {
   int id;
   float temp;
   float humi;
-  int randomNum;
   unsigned int readingId;
 } struct_message;
 
@@ -246,7 +243,8 @@ void getINA219(){
 }
 
 void blynk_tasks(){
-  display_menu++;
+  if(!display_static) display_menu++;
+
   lcd.clear();
   String dateTime = get_timestamp();
 
@@ -263,6 +261,18 @@ void blynk_tasks(){
     lcd.setCursor(0, 1); // row 1, column 0
     lcd.print("ReadID2:"+ String(read_id2));
   }
+   else if(display_menu == 3)
+   {
+    lcd.clear();
+    lcd.setCursor(0, 0); // row 0, column 0
+    lcd.print("1:"+ String(read_id1)); // 1:XXXXX 2:XXXXX
+    lcd.setCursor(8, 0); // row 0, column 0
+    lcd.print("2:" + String(read_id2));
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print("3:"+ String(read_id3));
+    lcd.setCursor(8, 1); // row 1, column 0
+    lcd.print("4:"+ String(read_id3*2));
+  }
   else{
     lcd.clear();
     lcd.setCursor(0, 0); // row 0, column 0
@@ -271,23 +281,21 @@ void blynk_tasks(){
     lcd.print("ReadID3:"+ String(read_id3));
   }
 
-  if(display_menu>3) display_menu = 0;
+  if(display_menu>4) display_menu = 0;
   
   Blynk.virtualWrite(V10,uptime_formatter::getUptime());
   Blynk.virtualWrite(V11, dateTime);
-  Blynk.virtualWrite(V13,jsonString1 + " | Received at: " + dt1);
+  Blynk.virtualWrite(V13,jsonString1 + " | " + dt1);
   Blynk.virtualWrite(V20,temp1);
   Blynk.virtualWrite(V21,humi1);
   Blynk.virtualWrite(V22,read_id1);
-  Blynk.virtualWrite(V23,random1);
 
-  Blynk.virtualWrite(V14,jsonString2 + " | Received at: " + dt2);
+  Blynk.virtualWrite(V14,jsonString2 + " | " + dt2);
   Blynk.virtualWrite(V24,temp2);
   Blynk.virtualWrite(V25,humi2);
   Blynk.virtualWrite(V26,read_id2);
-  Blynk.virtualWrite(V27,random2);
 
-  Blynk.virtualWrite(V50,jsonString3 + " | Received at: " + dt3);
+  Blynk.virtualWrite(V50,jsonString3 + " | " + dt3);
 
   Blynk.virtualWrite(V40,busvoltage);
   Blynk.virtualWrite(V41,shuntvoltage);
@@ -297,10 +305,10 @@ void blynk_tasks(){
 BLYNK_CONNECTED() {
   timeClient.setTimeOffset(28800);
   restart_ts = get_timestamp();
-  Blynk.syncVirtual(V0, V1, V2, V3);
-  Blynk.virtualWrite(V12,WiFi.localIP().toString());
+  Blynk.syncVirtual(V0, V1, V2, V3, V4, V5, V6);
+  Blynk.virtualWrite(V12, WiFi.localIP().toString());
   Blynk.virtualWrite(V16, restart_ts); 
-  Blynk.virtualWrite(V15,restartCounter);
+  Blynk.virtualWrite(V15, restartCounter);
 }
 
 BLYNK_WRITE(V0)
@@ -309,12 +317,26 @@ BLYNK_WRITE(V0)
   digitalWrite(relay_in1,pinValue);
   Blynk.virtualWrite(state0_vpin, digitalRead(relay_in1));
 }
+
 BLYNK_WRITE(V1)
 {
   int pinValue = param.asInt(); // assigning incoming value from pin V1 to a variable
   digitalWrite(relay_in2,pinValue);
   Blynk.virtualWrite(state1_vpin, digitalRead(relay_in2));
+
+    if(esp_now_initialized){
+    sendControl.control = pinValue; //  use V1 to control RGB LED on ESP32-C3 27.08.2022
+    //Send message via ESP-NOW
+    esp_err_t result = esp_now_send(client3_mac, (uint8_t *) &sendControl, sizeof(sendControl));
+    if (result == ESP_OK) {
+      Serial.println("Sent with success from BLYNK_WRITE(V1) to ESP32-C3 RGB LED");
+    }
+    else {
+      Serial.println("Error sending the data");
+    }
+  }
 }
+
 BLYNK_WRITE(V2)
 {
   int pinValue = param.asInt(); // assigning incoming value from pin V1 to a variable
@@ -367,27 +389,35 @@ BLYNK_WRITE(V4){
 
 BLYNK_WRITE(V5){
   int pinValue = param.asInt();
-  if(pinValue){
-    Serial.println("CLEARING MEMORY#");
-    lcd.setCursor(0, 0); // row 0, column 0
-    lcd.print("Clearing 32Bytes");
-    lcd.setCursor(0, 1); // row 1, column 0
-    lcd.print("PLEASE WAIT "); 
+  // if(pinValue){
+  //   Serial.println("CLEARING MEMORY#");
+  //   lcd.setCursor(0, 0); // row 0, column 0
+  //   lcd.print("Clearing 32Bytes");
+  //   lcd.setCursor(0, 1); // row 1, column 0
+  //   lcd.print("PLEASE WAIT "); 
 
-    for (int w=0; w < EEPROM_SIZE ; w++){
-      EEPROM.write(w, 255);
-      lcd.setCursor(0, 1); // row 1, column 0
-      lcd.print("PLEASE WAIT "+String(w));
-      Serial.print("W "); Serial.print(w);   Serial.print(":");  Serial.println("255");  
-    }
-    EEPROM.commit();
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-    lcd.clear();
-    lcd.setCursor(0, 0); // row 0, column 0
-    lcd.print("MEMORY CLEARED");
-    lcd.setCursor(0, 1); // row 1, column 0
-    lcd.print("RETURNING NOW"); 
-  }
+  //   for (int w=0; w < EEPROM_SIZE ; w++){
+  //     EEPROM.write(w, 255);
+  //     lcd.setCursor(0, 1); // row 1, column 0
+  //     lcd.print("PLEASE WAIT "+String(w));
+  //     Serial.print("W "); Serial.print(w);   Serial.print(":");  Serial.println("255");  
+  //   }
+  //   EEPROM.commit();
+  //   vTaskDelay(1000 / portTICK_PERIOD_MS);
+  //   lcd.clear();
+  //   lcd.setCursor(0, 0); // row 0, column 0
+  //   lcd.print("MEMORY CLEARED");
+  //   lcd.setCursor(0, 1); // row 1, column 0
+  //   lcd.print("RETURNING NOW"); 
+  // }
+  if(pinValue) display_static = true;
+  else display_static = false;
+}
+
+BLYNK_WRITE(V6){
+  int pinValue = param.asInt();
+  display_menu = pinValue;
+
 }
 
 // callback when data is sent
@@ -404,25 +434,22 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
   snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
            mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
   // Serial.println(macStr);
-  if(strcmp(macStr, client1_cchar) == 0) Serial.println("Client ID 1");
+  if(strcmp(macStr, client1_cchar) == 0)      Serial.println("Client ID 1");
   else if(strcmp(macStr, client2_cchar) == 0) Serial.println("Client ID 2");
   else if(strcmp(macStr, client3_cchar) == 0) Serial.println("Client ID 3");
-
-  else Serial.print(".");
+  else                                        Serial.println("Unknown Client! Check client's MAC");
 
   memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
 
-  board["id"] = incomingReadings.id;
-  board["temperature"] = incomingReadings.temp;
-  board["humidity"] = incomingReadings.humi;
-  board["random"] = incomingReadings.randomNum;
-  board["readingId"] = String(incomingReadings.readingId);
-
+  // must use double quote for the json label 27.08.2022
+  board["d"] = incomingReadings.id; 
+  board["#"] = String(incomingReadings.readingId); 
+  board["t"] = incomingReadings.temp; 
+  board["h"] = incomingReadings.humi; 
 
   if(incomingReadings.id == 1){
     temp1 = incomingReadings.temp;
     humi1 = incomingReadings.humi;
-    random1 = incomingReadings.randomNum;
     read_id1 = incomingReadings.readingId;
     dt1 = get_timestamp();
     jsonString1 = JSON.stringify(board);
@@ -430,7 +457,6 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
   else if(incomingReadings.id == 2){
     temp2 = incomingReadings.temp;
     humi2 = incomingReadings.humi;
-    random2 = incomingReadings.randomNum;
     read_id2 = incomingReadings.readingId;
     dt2 = get_timestamp();
     jsonString2 = JSON.stringify(board);
@@ -438,7 +464,6 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
   else if(incomingReadings.id == 3){
     temp3 = incomingReadings.temp;
     humi3 = incomingReadings.humi;
-    random3 = incomingReadings.randomNum;
     read_id3 = incomingReadings.readingId;
     dt3 = get_timestamp();
     jsonString3 = JSON.stringify(board);
@@ -487,6 +512,18 @@ void ESPNOW_HandlerTask(void * pvParameters)
   // Add peer CLIENT ID 2       
   if (esp_now_add_peer(&peerInfo2) != ESP_OK){
     Serial.println("Failed to add peer client ID 2");
+    return;
+  }
+
+    // Register peer (peer here is going to be client-3) CLIENT ID 3
+  esp_now_peer_info_t peerInfo3;
+  memset(&peerInfo3, 0, sizeof(peerInfo3)); // https://github.com/espressif/arduino-esp32/issues/6029
+  memcpy(peerInfo3.peer_addr, client3_mac, 6);
+  peerInfo3.encrypt = false;
+  
+  // Add peer CLIENT ID 3       
+  if (esp_now_add_peer(&peerInfo3) != ESP_OK){
+    Serial.println("Failed to add peer client ID 3");
     return;
   }
   // coming from client-side code end ----------------------------------------------------------
