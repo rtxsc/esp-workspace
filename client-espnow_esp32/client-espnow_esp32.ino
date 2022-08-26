@@ -3,7 +3,7 @@
 #include <WiFi.h>
 
 // Set your Board ID (ESP32 Sender #1 = BOARD_ID 1, ESP32 Sender #2 = BOARD_ID 2, etc)
-#define BOARD_ID    0x01  // DO NOT FORGET TO CHANGE THIS ID either 0x01 (client1) or 0x02 (client2)
+#define BOARD_ID    0x02  // DO NOT FORGET TO CHANGE THIS ID either 0x01 (client1) or 0x02 (client2)
 #define LED         0x02
 
 //MAC Address of the receiver AC:67:B2:25:85:78 (this is the AFS server - THE ONLY ONE SERVER)
@@ -53,6 +53,8 @@ int32_t getWiFiChannel(const char *ssid) {
 
 // callback when data is sent
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+ Serial.print("\r\nBoard ID:\t");
+ Serial.println(BOARD_ID,HEX);
   Serial.print("\r\nLast Packet Send Status:\t");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 }
