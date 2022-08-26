@@ -304,6 +304,9 @@ void blynk_tasks(){
   Blynk.virtualWrite(V22,read_id1);
 
   Blynk.virtualWrite(V14,jsonString2 + " | " + dt2);
+  
+  Blynk.virtualWrite(V23,num_active_peers);
+
   Blynk.virtualWrite(V24,temp2);
   Blynk.virtualWrite(V25,humi2);
   Blynk.virtualWrite(V26,read_id2);
@@ -439,6 +442,7 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 }
 
+
 // callback function that will be executed when data is received
 void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) { 
 
@@ -447,8 +451,11 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     get_millis = true;
   }
 
-  if(millis()-startTime > 5000){
-    num_active_peers = 0;
+  if(millis()-startTime > 1000){
+    num_active_peers--;
+    peer1 = 0;
+    peer2 = 0;
+    peer3 = 0;
     get_millis = false;
   }
   // Copies the sender mac address to a string
@@ -471,6 +478,7 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
   }
   // Serial.println("Unknown Client! Check client's MAC");
 
+
   memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
 
   // must use double quote for the json label 27.08.2022
@@ -488,7 +496,7 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     jsonString1 = JSON.stringify(board);
   }
   if(prev_read_id1 != read_id1){
-    num_active_peers++;
+    peer1++;
     prev_read_id1 = read_id1;
   }
 
@@ -500,7 +508,7 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     jsonString2 = JSON.stringify(board);
   }
   if(prev_read_id2 != read_id2){
-    num_active_peers++;
+    peer2++;
     prev_read_id2 = read_id2;
   } 
 
@@ -512,7 +520,7 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     jsonString3 = JSON.stringify(board);
   }
   if(prev_read_id3 != read_id3){
-    num_active_peers++;
+    peer3++;
     prev_read_id3 = read_id3;
   }
 
@@ -524,6 +532,7 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
   // esp_err_t esp_now_get_peer_num(esp_now_peer_num_t *num)
   esp_now_peer_num_t pn;
   esp_now_get_peer_num(&pn);
+  num_active_peers = peer1 + peer2 + peer3 ;
   if(num_active_peers < 0 ) num_active_peers = 0;
   if(num_active_peers > pn.total_num) num_active_peers = pn.total_num;
 
