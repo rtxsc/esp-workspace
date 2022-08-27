@@ -17,11 +17,11 @@ GyverTM1637 disp(CLK, DIO);
 
 // setting PWM properties
 const int freq = 5000;
-const int ledChannelR = 2;
+const int ledChannelR = 0;
 const int ledChannelG = 1;
-const int ledChannelB = 0;
+const int ledChannelB = 2;
 
-const int resolution = 12; //Resolution 8, 10, 12, 15
+const int resolution = 12; // Resolution 8, 10, 12, 15
 const int max_adc = pow(2,resolution)-1;
 
 void setup() {
@@ -50,6 +50,23 @@ void setup() {
     while (1) delay(10);
   }
   Serial.println("AHT10 found");
+  digitalWrite(RED,1);
+  digitalWrite(GRN,0);
+  digitalWrite(BLU,0);
+  delay(500);
+  digitalWrite(RED,0);
+  digitalWrite(GRN,1);
+  digitalWrite(BLU,0);
+  delay(500);
+  digitalWrite(RED,0);
+  digitalWrite(GRN,0);
+  digitalWrite(BLU,1);
+  delay(500);
+  digitalWrite(RED,0);
+  digitalWrite(GRN,0);
+  digitalWrite(BLU,0);
+  delay(500);
+
 }
 
 void loop() {
@@ -62,16 +79,16 @@ void loop() {
   // float dummy_tempc = analogRead(0);
   // dummy_tempc = map(dummy_tempc,0,4095,15,60);
   // tempc = dummy_tempc;
-  // map_rgb(dummy_tempc);
   // // DUMMY SECTION ENDS
 
   // Serial.print("Temperature: "); Serial.print(tempc); Serial.println(" degrees C");
   // Serial.print("Humidity: "); Serial.print(humid); Serial.println("% rH");
 
+  map_rgb(tempc);
+
   disp.point(1);   // выкл точки
   disp.displayClockTwist(tempc,humid,20);    // выводим время
   delay(100);
-
 
 }
 
