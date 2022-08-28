@@ -22,13 +22,13 @@ const int ledChannelG = 1;
 const int ledChannelB = 2;
 
 const int resolution = 12; // Resolution 8, 10, 12, 15
-const int max_adc = pow(2,resolution)-1;
+const int max_adc = (pow(2,resolution)-1)/3;
 
 void setup() {
   Serial.begin(115200);
   Wire.begin(I2C_SDA, I2C_SCL);
   disp.clear();
-  disp.brightness(7);
+  disp.brightness(4);
   pinMode(RED, OUTPUT);
   pinMode(GRN, OUTPUT);
   pinMode(BLU, OUTPUT);
@@ -97,13 +97,13 @@ void map_rgb(float temp){
     float blu_val = 0.0;
     float red_val = 0.0;
 
-    if(temp < 20){
+    if(temp < 30){
       // TOTALLY BLUE AREA
       ledcWrite(ledChannelR,0);
       ledcWrite(ledChannelG,0);
       ledcWrite(ledChannelB,max_adc);
     }
-    else if(temp >= 20 && temp < 35){
+    else if(temp >= 30 && temp < 50){
       // BLUE TO GREEN AREA
       blu_val = map(temp, 20, 34.9, max_adc, 0);  // blue --
       blu_val = constrain(blu_val, 0,max_adc);
@@ -112,13 +112,13 @@ void map_rgb(float temp){
       ledcWrite(ledChannelG,grn_val);
       ledcWrite(ledChannelB,blu_val);
     }
-    else if(temp == 35){
+    else if(temp == 50){
       // TOTALLY GREEN AREA
       ledcWrite(ledChannelR,0);
       ledcWrite(ledChannelG,max_adc);
       ledcWrite(ledChannelB,0);
     }
-    else if(temp > 35  && temp < 50){ 
+    else if(temp > 50  && temp < 55){ 
       // GREEN TO RED AREA
       red_val = map(temp, 35, 49.9, 0, max_adc); // red ++
       red_val = constrain(red_val, 0, max_adc);
@@ -128,7 +128,7 @@ void map_rgb(float temp){
       ledcWrite(ledChannelB,0);
     }
     else{
-      // exceeding 50 degree celcius
+      // exceeding 55 degree celcius
       // TOTALLY RED AREA
       ledcWrite(ledChannelR,max_adc);
       ledcWrite(ledChannelG,0);
