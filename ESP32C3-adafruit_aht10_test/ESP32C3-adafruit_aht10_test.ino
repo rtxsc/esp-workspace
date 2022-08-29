@@ -22,7 +22,8 @@ const int ledChannelG = 1;
 const int ledChannelB = 2;
 
 const int resolution = 12; // Resolution 8, 10, 12, 15
-const int max_adc = (pow(2,resolution)-1)/3;
+int max_adc = pow(2,resolution)-1;
+int prev_tempc;
 
 void setup() {
   Serial.begin(115200);
@@ -72,9 +73,17 @@ void setup() {
 void loop() {
   sensors_event_t humidity, temp;
   aht.getEvent(&humidity, &temp);// populate temp and humidity objects with fresh data
-  float tempc = temp.temperature;
-  float humid = humidity.relative_humidity;
-
+  int tempc = temp.temperature;
+  int humid = humidity.relative_humidity;
+  if (tempc == prev_tempc)
+  {
+    max_adc = max_adc / 4;
+    disp.brightness(2);
+  }
+  else{
+    max_adc = pow(2,resolution)-1;
+    disp.brightness(7);
+  }
   // // DUMMY SECTION STARTS
   // float dummy_tempc = analogRead(0);
   // dummy_tempc = map(dummy_tempc,0,4095,15,60);
@@ -88,6 +97,8 @@ void loop() {
 
   disp.point(1);   // выкл точки
   disp.displayClockTwist(tempc,humid,20);    // выводим время
+  prev_tempc = tempc; // save current temp as previous
+
   delay(100);
 
 }
