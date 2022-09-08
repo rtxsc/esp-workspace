@@ -1,5 +1,5 @@
 // #define ENABLE_OLED
-#define ENABLE_LCD
+//#define ENABLE_LCD
 #include <Wire.h>
 #include "rgb_lcd.h"
 #include <TinyGPS++.h>

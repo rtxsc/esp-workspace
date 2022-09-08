@@ -1,14 +1,18 @@
 #include <Adafruit_AHT10.h>
 #include <Wire.h>
-
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include "uptime_formatter.h"
 #define RED     3
 #define GRN     4
 #define BLU     5
 #define I2C_SDA 8 // 0 for ESP01s
 #define I2C_SCL 9 // 2 for ESP01s
 
-#define CLK 18
-#define DIO 19
+#define CLK 6
+#define DIO 7
+#define LED18 18
+#define LED19 19
 
 Adafruit_AHT10 aht;
 
@@ -25,6 +29,32 @@ const int resolution = 12; // Resolution 8, 10, 12, 15
 int max_adc = pow(2,resolution)-1;
 int prev_tempc;
 
+
+String NODE_NUMBER = "ESP1" ;
+#define ISDestURL "insecure-groker.initialstate.com" // https can't be handled by the ESP8266, thus "insecure"
+#define bucketKey "UXVB94NLT8CT" // Bucket key (hidden reference to your bucket that allows appending):
+#define bucketName "ESP32C3-XBOX-SERIES-X" // Bucket name (name your data will be associated with in Initial State):
+#define accessKey "ist_jXh1F13mOQDwsBRQdcMHjvvlAVyLbTRi"
+
+
+#define SUCCESS                 1
+#define UNSUCCESSFUL            0
+bool payload_pushed = false;
+long payload_push_interval;
+int IS_PUSH_INTERVAL = 3600000; // default to 1 hour
+
+String signalName[] = { 
+                          "temperature_",
+                          "humidity_",
+                          "Uptime_"
+                      };
+
+const byte payloadSize = sizeof(signalName)/sizeof(signalName[0]);
+String signalData[payloadSize];
+char ssid[] = "MaxisONE Fibre 2.4G";
+char pass[] = "respironics";
+WiFiClient       clientIS; // 13.06.2022 Monday (with teammate)
+
 void setup() {
   Serial.begin(115200);
   Wire.begin(I2C_SDA, I2C_SCL);
@@ -33,6 +63,9 @@ void setup() {
   pinMode(RED, OUTPUT);
   pinMode(GRN, OUTPUT);
   pinMode(BLU, OUTPUT);
+  pinMode(LED18, OUTPUT);
+  pinMode(LED19, OUTPUT);
+
 
     // configure LED PWM 
   ledcSetup(ledChannelR, freq, resolution);
@@ -68,6 +101,10 @@ void setup() {
   digitalWrite(BLU,0);
   delay(500);
 
+  digitalWrite(LED18,0);
+  digitalWrite(LED19,0);
+
+
 }
 
 void loop() {
@@ -77,7 +114,7 @@ void loop() {
   int humid = humidity.relative_humidity;
   if (tempc == prev_tempc)
   {
-    max_adc = max_adc / 4;
+    max_adc = 256;
     disp.brightness(2);
   }
   else{
@@ -96,7 +133,7 @@ void loop() {
   map_rgb(tempc);
 
   disp.point(1);   // выкл точки
-  disp.displayClockTwist(tempc,humid,20);    // выводим время
+  disp.displayClockTwist(tempc,humid,50);    // выводим время
   prev_tempc = tempc; // save current temp as previous
 
   delay(100);
@@ -148,3 +185,121 @@ void map_rgb(float temp){
 
 
 }
+
+
+
+// this method makes a HTTP connection to the server and creates a bucket is it does not exist:
+bool postBucket() {
+// close any connection before send a new request.
+// This will free the socket on the WiFi shield
+clientIS.stop();
+
+// if there's a successful connection:
+if (clientIS.connect(ISDestURL, 80) == SUCCESS) {
+ Serial.println("connecting...");
+  // send the HTTP PUT request:
+  // Build HTTP request.
+  String toSend = "POST /api/buckets HTTP/1.1\r\n";
+  toSend += "Host:";
+  toSend += ISDestURL;
+  toSend += "\r\n" ;
+  toSend += "User-Agent:Arduino\r\n";
+  toSend += "Accept-Version: ~0\r\n";
+  toSend += "X-IS-AccessKey: " accessKey "\r\n";
+  toSend += "Content-Type: application/json\r\n";
+  String payload = "{\"bucketKey\": \"" bucketKey "\",";
+  payload += "\"bucketName\": \"" bucketName "\"}";
+  payload += "\r\n";
+  toSend += "Content-Length: "+String(payload.length())+"\r\n";
+  toSend += "\r\n";
+  toSend += payload;
+
+  clientIS.println(toSend);
+  // Serial.println(toSend);
+  return true;
+} else {
+  // if you couldn't make a connection:
+  clientIS.stop();
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  return false;
+  }
+}
+
+
+void static_postData() {
+  // close any connection before send a new request.
+  // This will free the socket on the WiFi shield
+  clientIS.stop();
+  // if there's a successful connection:
+  Serial.println("[static_postData] clientIS stopped and contacting ISDestURL ...");
+
+  if (clientIS.connect(ISDestURL, 80) == SUCCESS) {
+   Serial.println("[static_postData] connection to ISDestURL successful...");
+    // send the HTTP PUT request:
+    // Build HTTP request.
+
+    for (int i=0; i<payloadSize; i++){
+      String toSend = "POST /api/events HTTP/1.1\r\n";
+      toSend += "Host:";
+      toSend += ISDestURL;
+      toSend += "\r\n" ;
+      toSend += "Content-Type: application/json\r\n";
+      toSend += "User-Agent: Arduino\r\n";
+      toSend += "Accept-Version: ~0\r\n";
+      toSend += "X-IS-AccessKey: " accessKey "\r\n";
+      toSend += "X-IS-BucketKey: " bucketKey "\r\n";
+
+      String payload = "[{\"key\": \"" + signalName[i] + "\", ";
+      payload +="\"value\": \"" + signalData[i] + "\"}]\r\n";
+
+      toSend += "Content-Length: "+String(payload.length())+"\r\n";
+      toSend += "\r\n";
+      toSend += payload;
+      // Serial.println(payload);
+      // Serial.println(toSend);
+      clientIS.println(toSend);
+    }
+    payload_pushed = true;
+  }
+} 
+
+
+void handle_posting(int t, int h){
+  
+  byte payloadCount = 0;
+
+  signalData[payloadCount] = String(t);              
+  signalName[payloadCount] = "temperature_"+NODE_NUMBER;
+  payloadCount++;
+
+  signalData[payloadCount] = String(h);       
+  signalName[payloadCount] = "humidity_"+NODE_NUMBER;
+  payloadCount++;
+
+  signalData[payloadCount] = String(uptime_formatter::getUptime()); 
+  signalName[payloadCount] = "Uptime_"+NODE_NUMBER;
+  payloadCount++;
+
+  
+  while(!payload_pushed && millis() - payload_push_interval > IS_PUSH_INTERVAL){
+
+    // for(int i=0; i < payloadCount ; i++){
+    //   Serial.print("Configuring signalName ["); Serial.print(i); Serial.print("] "); 
+    //   Serial.print(signalName[i]);
+    //   Serial.print(" with latest data of "); Serial.println(signalData[i]);
+    // }
+   
+    Serial.print("\n\nPushing static data at every ");
+    Serial.println(IS_PUSH_INTERVAL);
+  
+    static_postData();
+
+    payload_push_interval = millis();
+    Serial.println("Pushing static data DONE");
+
+  }
+  
+  
+  
+  
+  }

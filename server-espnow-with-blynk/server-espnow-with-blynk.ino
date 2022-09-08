@@ -3,7 +3,7 @@
 
 #define BLYNK_TEMPLATE_ID "TMPLLcUZS8pw"
 
-#define AFS // options: AFS/AFS2
+#define AFS2 // options: AFS/AFS2
 
 #ifdef AFS
   #define BLYNK_DEVICE_NAME "AFS"
@@ -96,7 +96,7 @@ String restart_ts = "None";
 
 // Replace with your network credentials (STATION)
 char auth[] = BLYNK_AUTH_TOKEN;
-const char* ssid = "NPRDC CELCOM M2";
+const char* ssid = "NPRDC CELCOM M1";
 const char* pass = "nprdc1234";
 const char* remote_host = "blynk.cloud";
 
