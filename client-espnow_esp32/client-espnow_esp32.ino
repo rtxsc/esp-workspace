@@ -2,7 +2,7 @@
 #include <esp_wifi.h>
 #include <WiFi.h>
 
-// #define ESP32C3
+#define ESP32C3
 
 // Set your Board ID (ESP32 Sender #1 = BOARD_ID 1, ESP32 Sender #2 = BOARD_ID 2, etc)
 #ifdef ESP32C3
@@ -21,7 +21,12 @@
 
 bool send_success = false;
 //MAC Address of the receiver AC:67:B2:25:85:78 (this is the AFS server - THE ONLY ONE SERVER)
-uint8_t serverAddress[] = {0xAC, 0x67, 0xB2, 0x25, 0x85, 0x78};
+//uint8_t serverAddress[] = {0xAC, 0x67, 0xB2, 0x25, 0x85, 0x78}; // AFS(one) at Block N
+// C8:2B:96:B9:A9:58
+uint8_t serverAddress[] = {0xC8, 0x2B, 0x96, 0xB9, 0xA9, 0x58}; // AFS2 at MKE2
+
+// Insert your SSID following the SSID connected by the server ! TAKE NOTE
+constexpr char WIFI_SSID[] = "Maxis Postpaid 128 5G";
 
 //Structure example to send data
 //Must match the receiver structure
@@ -49,8 +54,6 @@ const int interval = 5000;        // Interval at which to publish sensor reading
 
 unsigned int payload_id = 0;
 
-// Insert your SSID following the SSID connected by the server ! TAKE NOTE
-constexpr char WIFI_SSID[] = "NPRDC CELCOM M2";
 
 int32_t getWiFiChannel(const char *ssid) {
   if (int32_t n = WiFi.scanNetworks()) {

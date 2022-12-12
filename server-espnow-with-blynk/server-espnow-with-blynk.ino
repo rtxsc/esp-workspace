@@ -3,7 +3,7 @@
 
 #define BLYNK_TEMPLATE_ID "TMPLLcUZS8pw"
 
-#define AFS2 // options: AFS/AFS2
+#define AFS // options: AFS/AFS2
 
 #ifdef AFS
   #define BLYNK_DEVICE_NAME "AFS"
@@ -96,8 +96,8 @@ String restart_ts = "None";
 
 // Replace with your network credentials (STATION)
 char auth[] = BLYNK_AUTH_TOKEN;
-const char* ssid = "NPRDC CELCOM M1";
-const char* pass = "nprdc1234";
+const char* ssid = "UiTM WiFi IoT";
+const char* pass = "";
 const char* remote_host = "blynk.cloud";
 
 int board_id = 0;
@@ -795,11 +795,14 @@ void setup() {
   lcd.setCursor(0,0);
   lcd.print("Connecting Blynk");
   lcd.setCursor(0,1);
-  lcd.print("blynk.cloud:80");
+  lcd.print(ssid);
 // to configure the begin timeout, edit the file at path above
+  WiFi.mode(WIFI_STA); //Optional
   Blynk.begin(auth, ssid, pass);
   Serial.print("[BLYNK WiFi Handler Main Server Code] WiFi connected with IP ");  
   Serial.println(WiFi.localIP());
+  Serial.print("ESP Board MAC Address:  ");
+  Serial.println(WiFi.macAddress());
   lcd.clear();
   lcd.setCursor(0,0);
   lcd.print("!WiFi Connected!");

@@ -1,6 +1,6 @@
 #define BLYNK_PRINT Serial // Defines the object that is used for printing
 // #define BLYNK_DEBUG        // Optional, this enables more detailed prints
-#define QMS_NODE1 // QMS_NODE1 (Sabah) or QMS_NODE2 (Samarahan)
+#define QMS_NODE2 // QMS_NODE1 (Sabah) or QMS_NODE2 (Samarahan)
 #define SECURE_CONN
 
 #ifdef QMS_NODE1
@@ -244,8 +244,8 @@ String restart_ts = "None";
 
 // Replace with your network credentials (STATION)
 char auth[] = BLYNK_AUTH_TOKEN;
-const char* ssid = "NPRDC CELCOM M1";
-const char* pass = "nprdc1234";
+const char* ssid = "Maxis Postpaid 128 5F";
+const char* pass = "respironics";
 const char* remote_host = "blynk.cloud";
 
 float shuntvoltage;
