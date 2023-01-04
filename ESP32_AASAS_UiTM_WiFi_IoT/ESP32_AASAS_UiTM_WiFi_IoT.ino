@@ -4,7 +4,7 @@ Works with ESP32S2
 Edited 28 Dec 2022
 
 */
-// #define ESP32S2_2
+#define ESP32S2_2
 /* Comment this out to disable prints and save space */
 #define BLYNK_PRINT Serial
 #define BLYNK_TEMPLATE_ID "TMPLTapmSTsx"
@@ -74,6 +74,7 @@ String formattedDate;
 String dayStamp;
 String timeStamp;
 String restart_ts = "None";
+
 float shuntvoltage;
 float busvoltage;
 float current_mA;
@@ -179,7 +180,7 @@ void setup()
     lcd.createChar(3, right_arrow); // create block character
     lcd.createChar(4, degree_symbol); // create block character
     lcd.setCursor(0,0);
-    lcd.print("Hello AASAS ONE!");
+    lcd.print("Hello AASAS TWO!");
     lcd.setCursor(0,1);
     lcd.print("Connecting WiFi");
     delay(1000);
@@ -213,6 +214,7 @@ void setup()
     lcd.print(ssid);
   }
   // 30 Dec 2022 Friday
+  // /Users/zidz/Documents/Arduino/libraries/Blynk/src/Adapters/BlynkArduinoClient.h (to fix connecting to blynk.cloud:80 infinite loop)
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/Blynk/BlynkProtocol.h (to edit logo)
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/BlynkSimpleEsp32.h (to edit Blynk.begin method)
   Blynk.begin(auth, ssid, pass); // Blynk begin ignoring WiFi cuz already connected =)
@@ -221,7 +223,7 @@ void setup()
     lcd.setCursor(0,0);
     lcd.print("Blynk Connected!");
     lcd.setCursor(0,1);
-    lcd.print("-AASAS ONE INIT-");
+    lcd.print("-AASAS TWO INIT-");
   }
   on_onboard_led();
   pixels.begin(); 
@@ -247,7 +249,7 @@ void try_wifi_connect(){
     int column_index_left = init_index_left;
 
     int wl_count = 0;
-    int connect_elapse = 3; // second unit
+    int connect_elapse = 2; // second unit
     WiFi.begin(ssid, pass); // normal connect method
     while (WiFi.status() != WL_CONNECTED) {
           lcd.setCursor(column_index_right, 1);
@@ -312,10 +314,11 @@ void try_wifi_connect(){
 String get_timestamp(){
   timeClient.update();
   // https://github.com/taranais/NTPClient.git
-  formattedDate = timeClient.getFormattedTime(); // getFormattedDate
+  formattedDate = timeClient.getFormattedDate(); // getFormattedDate
+  // Serial.println(formattedDate);
   // Extract date
   int splitT = formattedDate.indexOf("T");
-  dayStamp = formattedDate.substring(0, splitT);
+  dayStamp = formattedDate.substring(4, splitT);
   String dateTime = timeClient.getFormattedTime() + " " + dayStamp;
   return dateTime;
 }
@@ -425,10 +428,10 @@ void rgbOff(){
       lcd.setCursor(0,1);
       lcd.print("-Restarting Now-");
     }
-    Serial.println("CLEARIN RCounter");
+    Serial.println("@@@@@@@@@@@@@@@@@@ CLEARING Reset Counter @@@@@@@@@@@@@@@@@@ ");
     EEPROM.write(restartCounterAddress, 255);
     EEPROM.commit();
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
     ESP.restart();
  
 }
@@ -559,6 +562,41 @@ void i2c_scan() {
   delay(2000);          
 }
 
+void display_uptime_top_row(){
+    uptime_formatter::getUptime();
+    lcd.setCursor(0, 0); // row 0, column 0
+    lcd.print("U");
+    if(int(uptime::getDays())<10)
+    {lcd.print("00");
+    lcd.print(uptime::getDays());}
+    else if(int(uptime::getDays())<100)
+    {lcd.print("0");
+    lcd.print(uptime::getDays());}
+    else
+    lcd.print(uptime::getDays());
+
+    lcd.print("d ");
+    lcd.setCursor(6, 0);
+    if(int(uptime::getHours())<10){
+      lcd.print("0");
+      lcd.print(uptime::getHours());
+    }
+    else
+      lcd.print(uptime::getHours());
+      lcd.print("h ");
+      lcd.setCursor(10, 0);
+      if(int(uptime::getMinutes())<10){
+        lcd.print("0");
+        lcd.print(uptime::getMinutes());
+      }
+    else
+      lcd.print(uptime::getMinutes());
+    lcd.print("m ");
+    lcd.setCursor(14, 0);
+    lcd.print(uptime::getSeconds());
+    lcd.print("s");
+  }
+
 void BLYNK_TASK(){
     if(millis() % 3 == 0)
       on_onboard_led();
@@ -572,6 +610,9 @@ void BLYNK_TASK(){
     getINA219();
     Blynk.virtualWrite(V6, busvoltage);
     Blynk.virtualWrite(V7, current_mA); 
+    display_uptime_top_row();
+    lcd.setCursor(0,1);
+    lcd.print(dateTime);
 }
 
 

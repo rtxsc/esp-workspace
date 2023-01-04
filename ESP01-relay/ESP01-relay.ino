@@ -1,4 +1,4 @@
-// #define SMART_EXTENSION
+#define SMART_EXTENSION
 
 #define BLYNK_PRINT Serial
 
@@ -32,17 +32,15 @@ extern "C"
 
 char auth[] = BLYNK_AUTH_TOKEN;
 #ifdef SMART_EXTENSION
-char ssid[] = "NPRDC CELCOM M1"; // iPhone 12 Pro Max
-char pass[] = "nprdc1234";
+char ssid[] = "UiTM WiFi IoT"; // iPhone 12 Pro Max
+char pass[] = "";
 #else
-// char ssid[] = "iPhone 12 Pro Max"; // iPhone 12 Pro Max
-// char pass[] = "robotronix";
-char ssid[] = "MaxisONE Fibre 2.4G"; // iPhone 12 Pro Max
+char ssid[] = "Maxis Postpaid 128 5G"; // iPhone 12 Pro Max
 char pass[] = "respironics";
 #endif
 const char* remote_host = "blynk.cloud";
 
-#define LED_BUILTIN2  2
+#define ONBOARD_LED   2
 #define RELAY         0
 
 WidgetLED relayStateLight(V20);
@@ -153,7 +151,7 @@ void get_ping(){
 
 void checkDeviceState(){
   bool relayState = digitalRead(RELAY);
-  bool ledState = digitalRead(LED_BUILTIN2);
+  bool ledState = digitalRead(ONBOARD_LED);
 
   if(!relayState) {
     relayStateLight.on();
@@ -191,7 +189,7 @@ BLYNK_WRITE(V0)
 BLYNK_WRITE(V1)
 {
   automatic = param.asInt(); // assigning incoming value from pin V1 to a variable
-  digitalWrite(LED_BUILTIN2, !automatic);
+  digitalWrite(ONBOARD_LED, !automatic);
 
 }
 
@@ -278,6 +276,35 @@ String getReadableTime(int motion_timeout_sec) {
   return readableTime;
 }
 
+void connect_wifi(){
+  // WiFi.mode(WIFI_STA); //Optional
+    WiFi.begin(ssid);
+    Serial.print("\nConnecting to ");
+    Serial.println(ssid);
+
+    int i = 0;
+    while(WiFi.status() != WL_CONNECTED){
+        Serial.print("|");
+        if(i % 30 == 0) Serial.println();
+        if(i == 10){
+          delay(1000);
+          ESP.restart();
+        }
+
+        on_onboard_led();
+        delay(100);
+        off_onboard_led();
+        delay(100);
+        i++;
+    }
+
+    Serial.println("\nConnected to the WiFi network");
+    Serial.print("Local ESP32 IP: ");
+    Serial.println(WiFi.localIP());
+
+
+}
+
 // the setup function runs once when you press reset or power the board
 void setup() {
   // initialize digital pin LED_BUILTIN as an output.
@@ -287,16 +314,12 @@ void setup() {
   byte prevRestart = EEPROM.read(restartCounterAddress);
   byte newRestart = check_restart_count(prevRestart);
 
-  pinMode(LED_BUILTIN2, OUTPUT);
+  pinMode(ONBOARD_LED, OUTPUT);
   pinMode(RELAY, OUTPUT);
-  digitalWrite(RELAY, HIGH);   
-  digitalWrite(LED_BUILTIN2, HIGH);
-  delay(1000);
-  
+  digitalWrite(RELAY, HIGH);   // reset relay
+
+  connect_wifi();
   Blynk.begin(auth, ssid, pass);
-  digitalWrite(RELAY, HIGH);   
-  digitalWrite(LED_BUILTIN2, HIGH);
-  delay(1000);
 
   Blynk.virtualWrite(V13,WiFi.localIP().toString());
   Blynk.virtualWrite(V15,ssid);
@@ -315,4 +338,12 @@ void setup() {
 void loop() {
   Blynk.run();
   timer.run();
+}
+
+void on_onboard_led(){
+    digitalWrite(ONBOARD_LED, HIGH);
+}
+
+void off_onboard_led(){
+    digitalWrite(ONBOARD_LED, LOW);
 }

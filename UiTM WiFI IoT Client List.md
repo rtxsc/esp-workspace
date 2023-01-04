@@ -39,6 +39,9 @@ C8:2B:96:B9:A9:58
 # please change to ESP32DEV-4
 9c:9c:1f:c5:94:24
 
+# ESP32DEV-5 (Stormwater 2 @ MKE2) - to be added
+84:0D:8E:E2:D6:D8
+
 
 ###### ESP32-C3 #################################
 # original name ESP32-C3 AASAS TWO 
@@ -50,6 +53,12 @@ C8:2B:96:B9:A9:58
 
 # ESP32C3-3
 7C:DF:A1:AF:AB:00
+
+# ESP32C3-4 (Aziz) - to be added
+7C:DF:A1:AF:AD:24
+
+# ESP32C3-5 (Xbox Temperature) - to be added
+7C:DF:A1:AF:AB:C0
 
 
 ###### ESP32-S2 #################################

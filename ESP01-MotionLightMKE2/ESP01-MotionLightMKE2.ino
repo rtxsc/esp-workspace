@@ -6,8 +6,8 @@
 #include <WiFiUdp.h>
 #include <PubSubClient.h>
 
-#define ssid_0 "NPRDC CELCOM M1"
-#define ssid_1 "NPRDC CELCOM M2"
+#define ssid_0 "UiTM WiFi IoT"
+#define ssid_1 "UiTM WiFi IoT"
 
 
 #include <Pinger.h>
@@ -20,7 +20,7 @@ const char* mqtt_server = "broker.emqx.io"; // "broker.mqtt-dashboard.com";
 const int   mqtt_port = 1883; // 1883;
 
 char* ssid = ssid_0;
-const char* pass = "nprdc1234";
+const char* pass = "";
 //char ssid[] = "iPhone 12 Pro Max"; // iPhone 12 Pro Max
 //char pass[] = "robotronix";
 //char ssid[] = "MaxisONE Fibre 2.4G"; // iPhone 12 Pro Max
