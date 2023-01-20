@@ -59,10 +59,9 @@ char auth[] = BLYNK_AUTH_TOKEN;
 char ssid[] = "UiTM WiFi IoT";
 char pass[] = ""; // leave this empty as this is an open network
 
-//char ssid[] = "Maxis Postpaid 128 5G";
-//char pass[] = "respironics"; // leave this empty as this is an open network
+// char ssid[] = "Robotronix";
+// char pass[] = "robotroxian"; // leave this empty as this is an open network
 WiFiUDP             ntpUDP;
-// NTPClient           timeClient(ntpUDP, "pool.ntp.org", 3600, 60000);
 NTPClient           timeClient(ntpUDP);
 BlynkTimer          timer;
 Adafruit_NeoPixel   pixels(NUMPIXELS, RGB);
@@ -81,6 +80,7 @@ float current_mA;
 
 bool GROVE_LCD_AVAILABLE = false;
 bool INA219_AVAILABLE = false;
+
 #define I2C_SDA                 41
 #define I2C_SCL                 40
 #define restartCounterAddress   0x0F // 15 : 1 byte
@@ -180,13 +180,12 @@ void setup()
     lcd.createChar(3, right_arrow); // create block character
     lcd.createChar(4, degree_symbol); // create block character
     lcd.setCursor(0,0);
-    lcd.print("Hello AASAS TWO!");
+    lcd.print("Hello "+ String(BLYNK_DEVICE_NAME));
     lcd.setCursor(0,1);
     lcd.print("Connecting WiFi");
     delay(1000);
   }  
   
-
   init_eeprom();
   restartCounter = EEPROM.read(restartCounterAddress);
   check_restart_count();
@@ -218,20 +217,19 @@ void setup()
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/Blynk/BlynkProtocol.h (to edit logo)
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/BlynkSimpleEsp32.h (to edit Blynk.begin method)
   Blynk.begin(auth, ssid, pass); // Blynk begin ignoring WiFi cuz already connected =)
+
   if(GROVE_LCD_AVAILABLE){
     lcd.clear();
     lcd.setCursor(0,0);
     lcd.print("Blynk Connected!");
     lcd.setCursor(0,1);
-    lcd.print("-AASAS TWO INIT-");
+    lcd.print("-"+String(BLYNK_DEVICE_NAME)+" INIT-");
   }
   on_onboard_led();
   pixels.begin(); 
   loopRGB();
-  loopRGB();
   rgbOff();
   timeClient.begin();
-  // timeClient.setTimeOffset(28800);
   timer.setInterval(1000L, BLYNK_TASK);
 }
 
@@ -250,8 +248,10 @@ void try_wifi_connect(){
 
     int wl_count = 0;
     int connect_elapse = 2; // second unit
+    Serial.printf("\n\nConnecting to %s\n\n", ssid);
     WiFi.begin(ssid, pass); // normal connect method
     while (WiFi.status() != WL_CONNECTED) {
+          Serial.printf("/");
           lcd.setCursor(column_index_right, 1);
           lcd.write(1);
           column_index_right++;
@@ -314,11 +314,9 @@ void try_wifi_connect(){
 String get_timestamp(){
   timeClient.update();
   // https://github.com/taranais/NTPClient.git
-  formattedDate = timeClient.getFormattedDate(); // getFormattedDate
-  // Serial.println(formattedDate);
-  // Extract date
-  int splitT = formattedDate.indexOf("T");
-  dayStamp = formattedDate.substring(4, splitT);
+  formattedDate   = timeClient.getFormattedDate(); 
+  int splitT      = formattedDate.indexOf("T");
+  dayStamp        = formattedDate.substring(4, splitT);
   String dateTime = timeClient.getFormattedTime() + " " + dayStamp;
   return dateTime;
 }
@@ -595,26 +593,55 @@ void display_uptime_top_row(){
     lcd.setCursor(14, 0);
     lcd.print(uptime::getSeconds());
     lcd.print("s");
+    
   }
 
+String get_rssi_state(int rssi){
+  String out;
+  if(rssi > -30) out = "Perfect signal";
+  else if(rssi > -50) out = "Excellent signal";
+  else if(rssi > -60) out = "Good reliable signal";
+  else if(rssi > -67) out = "Voice and Non-HD vid";
+  else if(rssi > -70) out = "Light browsing and email";
+  else if(rssi > -80) out = "Unstable connection";
+  else                out = "Unlikely connection";
+  return out;
+}
+  
 void BLYNK_TASK(){
+    getINA219();
     if(millis() % 3 == 0)
       on_onboard_led();
     else
       off_onboard_led();    
     String dateTime = get_timestamp();
+    // Serial.print("Datetime:");
+    // Serial.println(dateTime);
     int RSSI_dBm =  WiFi.RSSI();
+    
     Blynk.virtualWrite(V0,uptime_formatter::getUptime());
     Blynk.virtualWrite(V1, dateTime);
     Blynk.virtualWrite(V4, RSSI_dBm);
-    getINA219();
     Blynk.virtualWrite(V6, busvoltage);
     Blynk.virtualWrite(V7, current_mA); 
-    display_uptime_top_row();
+    Blynk.virtualWrite(V9, get_rssi_state(RSSI_dBm));
+
+    if(millis() % 2 == 0){
+      lcd.clear();
+      lcd.setCursor(0,0); // row 0, column 0
+      lcd.print("----"+ String(BLYNK_DEVICE_NAME)+"---"); // ----AASAS ONE---
+    }
+    else if(millis() % 5 == 0){
+      lcd.clear();
+      lcd.setCursor(0,0); // row 0, column 0
+      lcd.print(ssid); // print connected SSID
+    }
+    else{
+      display_uptime_top_row();
+    }
     lcd.setCursor(0,1);
     lcd.print(dateTime);
 }
-
 
 BLYNK_CONNECTED() {
   timeClient.setTimeOffset(28800);
@@ -623,9 +650,9 @@ BLYNK_CONNECTED() {
   Blynk.virtualWrite(V2, WiFi.localIP().toString());
   Blynk.virtualWrite(V3, restart_ts); 
   Blynk.virtualWrite(V5, restartCounter);
+  Blynk.virtualWrite(V8, ssid);
+
 }
-
-
 
 BLYNK_WRITE(V20){
   int pinValue = param.asInt();
