@@ -1,5 +1,5 @@
 # UiTM WiFI IoT Client List
-# Updated Monday "12.12.2022"
+# Updated Monday "7.FEB.2023"
 
 ###### RASPBERRY PI #################################
 
@@ -18,34 +18,27 @@ b8:27:eb:80:a4:3a
 
 ###### ESP32-DEV #################################
 
-# original name AASAS ONE SERVER
-# please change to ESP32DEV-0
+# ESP32DEV-0
 AC:67:B2:25:85:78 
 
-
-# original name AASAS TWO SERVER
-# please change to ESP32DEV-1
+# ESP32DEV-1
 C8:2B:96:B9:A9:58
 
-
-# original name ESP32 CLIENT2
-# please change to ESP32DEV-2
+# ESP32DEV-2
 9C:9C:1F:E3:85:3C
 
 # ESP32DEV-3
 84:CC:A8:5E:6E:E8
 
-# original name ESP32 CLIENT1
-# please change to ESP32DEV-4
+# ESP32DEV-4
 9c:9c:1f:c5:94:24
 
-# ESP32DEV-5 (Stormwater 2 @ MKE2) - to be added
+# ESP32DEV-5 
 84:0D:8E:E2:D6:D8
 
 
 ###### ESP32-C3 #################################
-# original name ESP32-C3 AASAS TWO 
-# please change to ESP32C3-1 
+# ESP32C3-1 
 7C:DF:A1:AF:AA:B4
 
 # ESP32C3-2
@@ -54,17 +47,16 @@ C8:2B:96:B9:A9:58
 # ESP32C3-3
 7C:DF:A1:AF:AB:00
 
-# ESP32C3-4 (Aziz) - to be added
+# ESP32C3-4 
 7C:DF:A1:AF:AD:24
 
-# ESP32C3-5 (Xbox Temperature) - to be added
+# ESP32C3-5 
 7C:DF:A1:AF:AB:C0
 
 
 ###### ESP32-S2 #################################
 
-# original name ESP32S2-AASAS ONE
-# please change to ESP32S2-1
+# ESP32S2-1
 7C:DF:A1:00:72:C6
 
 # ESP32S2-2

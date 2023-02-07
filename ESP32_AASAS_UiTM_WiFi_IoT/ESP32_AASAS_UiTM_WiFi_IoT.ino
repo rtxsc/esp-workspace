@@ -4,7 +4,7 @@ Works with ESP32S2
 Edited 28 Dec 2022
 
 */
-#define ESP32S2_2
+// #define ESP32S2_2
 /* Comment this out to disable prints and save space */
 #define BLYNK_PRINT Serial
 #define BLYNK_TEMPLATE_ID "TMPLTapmSTsx"
