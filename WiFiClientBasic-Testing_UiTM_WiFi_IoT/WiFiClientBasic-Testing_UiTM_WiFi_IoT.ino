@@ -5,8 +5,8 @@
 #include "uptime_formatter.h"
 #include "uptime.h"
 
-#define ESP32S2 // comment this line if uploading to ESP32C3
-// #define LCD_DISABLED // uncomment this for ESP32C3
+// #define ESP32S2 // comment this line if uploading to ESP32C3
+#define LCD_DISABLED // uncomment this for ESP32C3
 
 #ifdef ESP32S2
   #include <Adafruit_NeoPixel.h>
@@ -111,7 +111,8 @@ void setup(){
     if(strcmp(mac_addr,"7C:DF:A1:AF:AC:FC")==0) esp_model = "ESP32C3-2";
     if(strcmp(mac_addr,"7C:DF:A1:AF:AB:00")==0) esp_model = "ESP32C3-3";
     if(strcmp(mac_addr,"7C:DF:A1:AF:AD:24")==0) esp_model = "ESP32C3-4"; // aziz
-    if(strcmp(mac_addr,"7C:DF:A1:AF:AB:C0")==0) esp_model = "ESP32C3-5"; // aziz
+    if(strcmp(mac_addr,"7C:DF:A1:AF:AB:C0")==0) esp_model = "ESP32C3-5"; // xbox
+    if(strcmp(mac_addr,"7C:DF:A1:AF:AC:B8")==0) esp_model = "ESP32C3-6"; // aniq
 
     if(strcmp(mac_addr,"7C:DF:A1:00:72:C6")==0) esp_model = "ESP32S2-1";
     if(strcmp(mac_addr,"7C:DF:A1:00:BB:7C")==0) esp_model = "ESP32S2-2";
@@ -121,6 +122,14 @@ void setup(){
     if(strcmp(mac_addr,"7C:DF:A1:00:BA:BE")==0) esp_model = "ESP32S2-6";
     if(strcmp(mac_addr,"7C:DF:A1:00:A7:0C")==0) esp_model = "ESP32S2-7";
     if(strcmp(mac_addr,"7C:DF:A1:00:A7:38")==0) esp_model = "ESP32S2-8";
+
+    if(strcmp(mac_addr,"AC:67:B2:25:85:78")==0) esp_model = "ESP32DEV-0";
+    if(strcmp(mac_addr,"C8:2B:96:B9:A9:58")==0) esp_model = "ESP32DEV-1";
+    if(strcmp(mac_addr,"9C:9C:1F:E3:85:3C")==0) esp_model = "ESP32DEV-2";
+    if(strcmp(mac_addr,"84:CC:A8:5E:6E:E8")==0) esp_model = "ESP32DEV-3";
+    if(strcmp(mac_addr,"9C:9C:1F:C5:94:24")==0) esp_model = "ESP32DEV-4";
+    if(strcmp(mac_addr,"84:0D:8E:E2:D6:D8")==0) esp_model = "ESP32DEV-5";
+
 
     Serial.printf("[setup] %s Found!\n",esp_model);
     Serial.printf("[setup] MAC: %s\n", mac_addr);
@@ -221,12 +230,14 @@ void loop()
 {
     Serial.printf("%s Found!\n",esp_model);
     Serial.println(mac_str);
+    #ifndef LCD_DISABLED
     lcd.clear();
     lcd.setCursor(0,0);
     lcd.print(esp_model);
     lcd.setCursor(0,1);
     lcd.print(mac_str);
     delay(1000);
+    #endif
 
   int RSSI_dBm =  WiFi.RSSI();
   String rssi_state = get_rssi_state(RSSI_dBm);
@@ -547,8 +558,6 @@ void try_wifi_connect(){
             if(millis()/1000 % 2 == 0){
                 lcd.setCursor(0, 0); // row 1, column 0
                 lcd.print("Connecting WiFi");  
-                off_onboard_led();
-
             }
             else if(millis()/1000 % 3 == 0 || millis()/1000 % 5 == 0){
                 lcd.clear();
@@ -562,13 +571,15 @@ void try_wifi_connect(){
             else{
                 lcd.setCursor(0, 0); // row 1, column 0
                 lcd.print(String(ssid));
-                on_onboard_led();
             }
           }
 
       wl_count++;
       // vTaskDelay(100 / portTICK_PERIOD_MS);
-      delay(100);
+      on_onboard_led();
+      delay(50);
+      off_onboard_led();  
+      delay(50);
       
       if(wl_count > connect_elapse*10 && (WiFi.status() != WL_CONNECTED)){
           wl_count = 0;

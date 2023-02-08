@@ -32,6 +32,7 @@ C8:2B:96:B9:A9:58
 
 # ESP32DEV-4
 9c:9c:1f:c5:94:24
+9C:9C:1F:C5:94:24
 
 # ESP32DEV-5 
 84:0D:8E:E2:D6:D8
@@ -51,7 +52,10 @@ C8:2B:96:B9:A9:58
 7C:DF:A1:AF:AD:24
 
 # ESP32C3-5 
-7C:DF:A1:AF:AB:C0
+7C:DF:A1:AF:AB:C0 (xbox)
+
+# ESP32C3-6 
+7C:DF:A1:AF:AC:B8 (aniq's c3 NOT REGISTERED)
 
 
 ###### ESP32-S2 #################################
