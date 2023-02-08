@@ -1,6 +1,11 @@
 # UiTM WiFI IoT Client List
 # Updated Monday "7.FEB.2023"
 
+
+# Master Server
+f8:ff:c2:11:58:a5
+F8:FF:C2:11:58:A5 (MacBook Pro 16)
+
 ###### RASPBERRY PI #################################
 
 # MAC_PI_3B_ORI           
