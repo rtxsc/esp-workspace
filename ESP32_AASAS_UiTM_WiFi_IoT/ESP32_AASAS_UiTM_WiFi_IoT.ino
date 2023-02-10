@@ -4,9 +4,9 @@ Works with ESP32S2
 Edited 28 Dec 2022
 
 */
-// #define ESP32S2_1
+#define ESP32S2_1
 // #define ESP32S2_2
-#define ESP32S2_4
+// #define ESP32S2_4
 // #define ESP32S2_5
 
 /* Comment this out to disable prints and save space */
@@ -81,6 +81,10 @@ char pass[] = ""; // leave this empty as this is an open network
 
 // char ssid[] = "Robotronix";
 // char pass[] = "robotroxian"; // leave this empty as this is an open network
+
+// char ssid[] = "Maxis_128_5G";
+// char pass[] = "respironics"; // leave this empty as this is an open network
+
 WiFiUDP             ntpUDP;
 NTPClient           timeClient(ntpUDP);
 BlynkTimer          timer;
@@ -93,6 +97,7 @@ String formattedDate;
 String dayStamp;
 String timeStamp;
 String restart_ts = "None";
+String disconnected_ts = "None";
 
 float shuntvoltage;
 float busvoltage;
@@ -103,12 +108,16 @@ bool INA219_AVAILABLE = false;
 
 #define I2C_SDA                 41
 #define I2C_SCL                 40
-#define restartCounterAddress   0x0F // 15 : 1 byte
-#define ESP_RST_COUNTER_ADDR    0x10 // 16 : 1 byte
+#define restartCounterAddress   0x0F // 15 & 16 : 2 bytes
+#define disconnCounterAddress   0x12 
 #define EEPROM_SIZE             32
 #define FAST_DELAY              1000
-byte restartCounter;      // value will be loaded from EEPROM
-byte prev_restartCounter;
+
+int restartCounter;      // value will be loaded from EEPROM
+int prev_restartCounter;
+int disconnection_count = 0;
+int prev_disconnection_count = 0;
+
 byte tick = 0;
 
 
@@ -155,6 +164,8 @@ byte tick = 0;
   };
 
 BLYNK_CONNECTED();
+BLYNK_DISCONNECTED();
+
 BLYNK_WRITE(V20);
 BLYNK_WRITE(V21);
 BLYNK_WRITE(V22);
@@ -176,7 +187,10 @@ void greenOn();
 void blueOn();
 void rgbOff();
 void check_restart_count();
+void check_disconn_count();
+
 void clear_restartCounter();
+void clear_disconnCounter();
 void try_wifi_connect(int timeout);
 
 void onRelay1();
@@ -260,8 +274,13 @@ void setup()
   }  
   
   init_eeprom();
-  restartCounter = EEPROM.read(restartCounterAddress);
+  // restartCounter = EEPROM.read(restartCounterAddress);
+  restartCounter = read16bitFromEEPROM(restartCounterAddress);
+  disconnection_count = read16bitFromEEPROM(disconnCounterAddress);
+
   check_restart_count();
+  check_disconn_count();
+
   pinMode(ONBOARD_LED, OUTPUT);
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
@@ -283,10 +302,12 @@ void setup()
     lcd.write(1); // add arrow before SSID
     lcd.print(ssid);
   }
-  // 30 Dec 2022 Friday
+  // 30 Dec 2022 Friday | Polished 10 Feb 2023 Friday
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/Adapters/BlynkArduinoClient.h (to fix connecting to blynk.cloud:80 infinite loop)
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/Blynk/BlynkProtocol.h (to edit logo)
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/BlynkSimpleEsp32.h (to edit Blynk.begin method)
+  // /Users/zidz/Documents/Arduino/libraries/Blynk/src/Blynk/BlynkHandlers.h (BLYNK define methods)
+
   Blynk.begin(auth, ssid, pass); // Blynk begin ignoring WiFi cuz already connected =)
 
   if(GROVE_LCD_AVAILABLE){
@@ -381,12 +402,14 @@ void try_wifi_connect(int timeout){
       // vTaskDelay(100 / portTICK_PERIOD_MS);
       
       if(wl_count > connect_elapse*10 && (WiFi.status() != WL_CONNECTED)){
+          Serial.println("\n\n [ESP32_AASAS_UiTM_WiFi_IoT] Cant join network within timeout. Restarting...");
           wl_count = 0;
           lcd.clear();
           lcd.setCursor(0, 0); // row 1, column 0
           lcd.print("Not Connected!");
           lcd.setCursor(0, 1); // row 1, column 0
           lcd.print("Restarting ESP32");
+          delay(1000);
           ESP.restart();
       }
     }
@@ -509,6 +532,36 @@ void rgbOff(){
   #endif   
   }
 
+void write16bitIntoEEPROM(int address, int number)
+{ 
+  EEPROM.write(address, number >> 8);
+  EEPROM.write(address + 1, number & 0xFF);
+}
+
+int read16bitFromEEPROM(int address)
+{
+  return (EEPROM.read(address) << 8) + EEPROM.read(address + 1);
+}
+
+
+void clear_disconnCounter(){
+    if(GROVE_LCD_AVAILABLE){
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("-Reset Disconn!-");
+      lcd.setCursor(0,1);
+      lcd.print("-Restarting Now-");
+    }
+    Serial.println("@@@@@@@@@@@@@@@@@@ CLEARING Disconnection Counter @@@@@@@@@@@@@@@@@@ ");
+    write16bitIntoEEPROM(disconnCounterAddress,255);
+    disconnection_count = 0;
+    Blynk.virtualWrite(V15, "Not yet");
+    Blynk.virtualWrite(V16, disconnection_count);
+    // EEPROM.write(restartCounterAddress, 255);
+    EEPROM.commit();
+ 
+}
+
  void clear_restartCounter(){
     if(GROVE_LCD_AVAILABLE){
       lcd.clear();
@@ -518,11 +571,45 @@ void rgbOff(){
       lcd.print("-Restarting Now-");
     }
     Serial.println("@@@@@@@@@@@@@@@@@@ CLEARING Reset Counter @@@@@@@@@@@@@@@@@@ ");
-    EEPROM.write(restartCounterAddress, 255);
+    write16bitIntoEEPROM(restartCounterAddress,255);
+    // EEPROM.write(restartCounterAddress, 255);
     EEPROM.commit();
     vTaskDelay(10 / portTICK_PERIOD_MS);
     ESP.restart();
  
+}
+
+void check_disconn_count(){
+  if(disconnection_count == 255 || disconnection_count == 0){
+    disconnection_count = 0;
+    write16bitIntoEEPROM(disconnCounterAddress,disconnCounterAddress);
+    EEPROM.commit();
+    vTaskDelay(3.3 / portTICK_PERIOD_MS); // EEPROM needs 3.3ms to write
+
+  }
+  else{
+      Serial.println("just a normal disconnection");
+      // lcd.setCursor(0, 0); 
+      // lcd.print("REBOOTED NODE");
+      // lcd.setCursor(0, 1); // row 1, column 0
+      // lcd.print("Restarted "+String(restartCounter) + " tms");
+      // vTaskDelay(FAST_DELAY / portTICK_PERIOD_MS);
+      // lcd.clear();
+      
+      prev_disconnection_count = disconnection_count; // for the comparison later on
+      disconnection_count += 1;  // increment rst count by 1 for each reboot
+      Serial.printf("the current disconnection_count is %d\n", disconnection_count);
+      // lcd.setCursor(0, 0); 
+      // lcd.print("--WELCOME BACK--"); 
+      // lcd.setCursor(0, 1); // row 1, column 0
+      // lcd.print("Current RST "+String(restartCounter) + " times"); // load current rst count
+      // vTaskDelay(FAST_DELAY / portTICK_PERIOD_MS);
+      // lcd.clear();
+      write16bitIntoEEPROM(disconnCounterAddress,disconnection_count);
+      // EEPROM.write(restartCounterAddress, restartCounter);
+      EEPROM.commit();
+      vTaskDelay(3.3 / portTICK_PERIOD_MS); // EEPROM needs 3.3ms to write          
+  }
 }
 
 void check_restart_count(){
@@ -533,7 +620,8 @@ void check_restart_count(){
     // vTaskDelay(FAST_DELAY / portTICK_PERIOD_MS);
     // lcd.clear();
     restartCounter = 0;
-    EEPROM.write(restartCounterAddress, restartCounter);
+    // EEPROM.write(restartCounterAddress, restartCounter);
+    write16bitIntoEEPROM(restartCounterAddress,restartCounter);
     EEPROM.commit();
     vTaskDelay(3.3 / portTICK_PERIOD_MS); // EEPROM needs 3.3ms to write
 
@@ -556,8 +644,8 @@ void check_restart_count(){
       // lcd.print("Current RST "+String(restartCounter) + " times"); // load current rst count
       // vTaskDelay(FAST_DELAY / portTICK_PERIOD_MS);
       // lcd.clear();
-
-      EEPROM.write(restartCounterAddress, restartCounter);
+      write16bitIntoEEPROM(restartCounterAddress,restartCounter);
+      // EEPROM.write(restartCounterAddress, restartCounter);
       EEPROM.commit();
       vTaskDelay(3.3 / portTICK_PERIOD_MS); // EEPROM needs 3.3ms to write          
   }
@@ -580,7 +668,13 @@ void init_eeprom(){
   Serial.println(" bytes read from Flash:");
   for (int i = 0; i < EEPROM_SIZE; i++)
   {
-    Serial.print("R "); Serial.print(i);   Serial.print(":");
+    if(i== 15 || i==16){
+        Serial.print("Restart Count Memory "); Serial.print(i);   Serial.print(":");
+    }else if (i== 18 || i==19){
+        Serial.print("Disconnection Count Memory "); Serial.print(i);   Serial.print(":");
+    }else{
+        Serial.print("R "); Serial.print(i);   Serial.print(":");
+    }
     Serial.print(byte(EEPROM.read(i))); Serial.println();
   }
   Serial.println();
@@ -825,6 +919,14 @@ void BLYNK_TASK(){
 }
 
 BLYNK_CONNECTED() {
+  if(GROVE_LCD_AVAILABLE){
+    lcd.clear();
+    lcd.setCursor(0,0); // row 0, column 0
+    lcd.print("Blynk Connected!"); // print connected SSID
+    lcd.setCursor(0,1); // row 0, column 0
+    lcd.print("Device is Online"); // print connected SSID
+    delay(1000);
+  }
   timeClient.setTimeOffset(28800);
   restart_ts = get_timestamp();
   Blynk.syncVirtual(V20,V21,V22,V23,V24,V25,V26);
@@ -832,7 +934,66 @@ BLYNK_CONNECTED() {
   Blynk.virtualWrite(V3, restart_ts); 
   Blynk.virtualWrite(V5, restartCounter);
   Blynk.virtualWrite(V8, ssid);
+  if(disconnection_count == 0)
+    Blynk.virtualWrite(V15, "Not yet");
+  else  
+    Blynk.virtualWrite(V15, disconnected_ts);
+  Blynk.virtualWrite(V16, disconnection_count);
+}
 
+BLYNK_DISCONNECTED() {
+    disconnection_count++;
+    disconnected_ts = get_timestamp();
+    Serial.println("[ESP32_AASAS_UiTM_WiFi_IoT] Blynk Disconnected");
+    if(GROVE_LCD_AVAILABLE){
+      lcd.clear();
+      lcd.setCursor(0,0); // row 0, column 0
+      lcd.print("Blynk Disconnected"); // print connected SSID
+      lcd.setCursor(0,1); // row 0, column 0
+      lcd.print("WiFi is Down"); // print connected SSID
+      delay(1000);
+      lcd.clear();
+      lcd.setCursor(0,0); // row 0, column 0
+      lcd.print("Reinit Blynk"); // print connected SSID
+      lcd.setCursor(0,1); // row 0, column 0
+      lcd.print("> Blynk.begin()"); // print connected SSID
+      delay(1000);
+    }
+    Blynk.begin(auth, ssid, pass);
+}
+
+BLYNK_RESTART(){
+  if(GROVE_LCD_AVAILABLE){
+    lcd.clear();
+    lcd.setCursor(0,0); // row 0, column 0
+    lcd.print("Blynk Restart"); // print connected SSID
+    lcd.setCursor(0,1); // row 0, column 0
+    lcd.print("Force Restart"); // print connected SSID
+    delay(1000);
+  }
+}
+
+BLYNK_ELAPSE_OUT(char state, int val){
+/*
+ state:
+ c = connect wifi
+ r = reconnect wifi
+ w = wait to restart
+*/
+  if(GROVE_LCD_AVAILABLE){
+    lcd.clear();
+    lcd.setCursor(0,0); // row 0, column 0
+    if(state == 'c') 
+      lcd.print("[B]Connect WiFi"); // print connected SSID
+    else if(state == 'r')
+      lcd.print("[B]Reconnecting"); // print connected SSID
+    else
+      lcd.print("[B]Restart in...");
+    lcd.setCursor(0,1); // row 0, column 0
+    lcd.print("[B]Elapse: "+String(val)+" s"); // print connected SSID
+  }
+  // Serial.println("[ESP32_AASAS_UiTM_WiFi_IoT] Elapse out here");
+  // Serial.println(val);
 }
 
 BLYNK_WRITE(V20){
@@ -874,4 +1035,11 @@ BLYNK_WRITE(V26){
   if(val) onRelay3();
   else    offRelay3();
 }
+
+BLYNK_WRITE(V27){
+  int pinValue = param.asInt();
+  if(pinValue) clear_disconnCounter();
+}
+
+
 
