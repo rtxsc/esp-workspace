@@ -4,10 +4,11 @@ Works with ESP32S2
 Edited 28 Dec 2022
 Subscribed to Blynk Plus RM30.90/month on Monday 13Feb2023
 */
-#define ESP32S2_1
+// #define ESP32S2_1
 // #define ESP32S2_2
 // #define ESP32S2_4
 // #define ESP32S2_5
+#define ESP32S2_6
 
 /* Comment this out to disable prints and save space */
 #define BLYNK_PRINT Serial
@@ -26,7 +27,12 @@ Subscribed to Blynk Plus RM30.90/month on Monday 13Feb2023
 #elif defined ESP32S2_5
   #define BLYNK_DEVICE_NAME "AASAS M05"
   #define BLYNK_AUTH_TOKEN "Rq548So3QmWpZIJyAt59TVmW8W4GGlUd"
+#elif defined ESP32S2_6
+  #define BLYNK_DEVICE_NAME "AASAS M06"
+  #define BLYNK_AUTH_TOKEN "qtER7nxNJH1QioLqmH_rE688VdJ5i0L0"
 #endif
+
+
 
 
 #include <Wire.h>
