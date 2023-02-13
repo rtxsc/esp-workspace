@@ -2,7 +2,7 @@
 Testing UiTM WiFi IoT 9/12/2022 Friday
 Works with ESP32S2
 Edited 28 Dec 2022
-
+Subscribed to Blynk Plus RM30.90/month on Monday 13Feb2023
 */
 #define ESP32S2_1
 // #define ESP32S2_2
@@ -11,20 +11,15 @@ Edited 28 Dec 2022
 
 /* Comment this out to disable prints and save space */
 #define BLYNK_PRINT Serial
-
-#ifdef ESP32S2_1 or ESP32S2_1
-  #define BLYNK_TEMPLATE_ID "TMPLTapmSTsx" // template ID for ONE and TWO
-#else
-  #define BLYNK_TEMPLATE_ID "TMPLjsD8y_SC" // template ID for M04 and M05
-#endif
-
+#define BLYNK_TEMPLATE_ID   "TMPLjsD8y_SC" // template ID for M04 and M05 then subcribing to Plus RM30.90 13Feb2023
+#define BLYNK_TEMPLATE_NAME "AASAS UiTM WiFi IoT"
 
 #ifdef ESP32S2_1
-  #define BLYNK_DEVICE_NAME "AASAS ONE"
-  #define BLYNK_AUTH_TOKEN "mi-P1ww34-Z1hCIHdsZY_zBiChxDmFW3"
+  #define BLYNK_DEVICE_NAME "AASAS M01"
+  #define BLYNK_AUTH_TOKEN "J3DXwnJNxoCIUI3TF7ULHmCKdDg27FV4"
 #elif defined ESP32S2_2
-  #define BLYNK_DEVICE_NAME "AASAS TWO"
-  #define BLYNK_AUTH_TOKEN "wl51qgH6H_DDeSC-7FvB39wQJ3d7ic8V"
+  #define BLYNK_DEVICE_NAME "AASAS M02"
+  #define BLYNK_AUTH_TOKEN "AgRl8rHXRFkz4KnUvFWfQtlUCGZ6g8ug"
 #elif defined ESP32S2_4
   #define BLYNK_DEVICE_NAME "AASAS M04"
   #define BLYNK_AUTH_TOKEN "gee5lkJxSCmQrqplsAiH-uVPuNkF-B3G"
@@ -116,12 +111,10 @@ bool INA219_AVAILABLE = false;
 int restartCounter;      // value will be loaded from EEPROM
 int prev_restartCounter;
 int disconnection_count = 0;
-int prev_disconnection_count = 0;
 
 byte tick = 0;
 
-
- byte degree_symbol[8] = {
+byte degree_symbol[8] = {
     0b00110,
     0b01001,
     0b01001,
@@ -187,7 +180,6 @@ void greenOn();
 void blueOn();
 void rgbOff();
 void check_restart_count();
-void check_disconn_count();
 
 void clear_restartCounter();
 void clear_disconnCounter();
@@ -266,11 +258,13 @@ void setup()
     lcd.setCursor(0,1);
     lcd.print(mac_str);
     delay(2000);
+    lcd.clear();
     lcd.setCursor(0,0);
     lcd.print("Hello "+ String(BLYNK_DEVICE_NAME));
     lcd.setCursor(0,1);
     lcd.print("Connecting WiFi");
     delay(1000);
+    lcd.clear();
   }  
   
   init_eeprom();
@@ -279,7 +273,6 @@ void setup()
   disconnection_count = read16bitFromEEPROM(disconnCounterAddress);
 
   check_restart_count();
-  check_disconn_count();
 
   pinMode(ONBOARD_LED, OUTPUT);
   pinMode(IN1, OUTPUT);
@@ -308,7 +301,7 @@ void setup()
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/BlynkSimpleEsp32.h (to edit Blynk.begin method)
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/Blynk/BlynkHandlers.h (BLYNK define methods)
 
-  Blynk.begin(auth, ssid, pass); // Blynk begin ignoring WiFi cuz already connected =)
+  Blynk.begin(auth, ssid, pass); // connectWiFi in Blynk is active. meaning connecting twice
 
   if(GROVE_LCD_AVAILABLE){
     lcd.clear();
@@ -553,10 +546,9 @@ void clear_disconnCounter(){
       lcd.print("-Restarting Now-");
     }
     Serial.println("@@@@@@@@@@@@@@@@@@ CLEARING Disconnection Counter @@@@@@@@@@@@@@@@@@ ");
-    write16bitIntoEEPROM(disconnCounterAddress,255);
-    disconnection_count = 0;
-    Blynk.virtualWrite(V15, "Not yet");
-    Blynk.virtualWrite(V16, disconnection_count);
+    write16bitIntoEEPROM(disconnCounterAddress,0);
+    Blynk.virtualWrite(V15, "Cleared Disconn Counter");
+    Blynk.virtualWrite(V16, 0); // disconnection counter reset to zero
     // EEPROM.write(restartCounterAddress, 255);
     EEPROM.commit();
  
@@ -577,39 +569,6 @@ void clear_disconnCounter(){
     vTaskDelay(10 / portTICK_PERIOD_MS);
     ESP.restart();
  
-}
-
-void check_disconn_count(){
-  if(disconnection_count == 255 || disconnection_count == 0){
-    disconnection_count = 0;
-    write16bitIntoEEPROM(disconnCounterAddress,disconnCounterAddress);
-    EEPROM.commit();
-    vTaskDelay(3.3 / portTICK_PERIOD_MS); // EEPROM needs 3.3ms to write
-
-  }
-  else{
-      Serial.println("just a normal disconnection");
-      // lcd.setCursor(0, 0); 
-      // lcd.print("REBOOTED NODE");
-      // lcd.setCursor(0, 1); // row 1, column 0
-      // lcd.print("Restarted "+String(restartCounter) + " tms");
-      // vTaskDelay(FAST_DELAY / portTICK_PERIOD_MS);
-      // lcd.clear();
-      
-      prev_disconnection_count = disconnection_count; // for the comparison later on
-      disconnection_count += 1;  // increment rst count by 1 for each reboot
-      Serial.printf("the current disconnection_count is %d\n", disconnection_count);
-      // lcd.setCursor(0, 0); 
-      // lcd.print("--WELCOME BACK--"); 
-      // lcd.setCursor(0, 1); // row 1, column 0
-      // lcd.print("Current RST "+String(restartCounter) + " times"); // load current rst count
-      // vTaskDelay(FAST_DELAY / portTICK_PERIOD_MS);
-      // lcd.clear();
-      write16bitIntoEEPROM(disconnCounterAddress,disconnection_count);
-      // EEPROM.write(restartCounterAddress, restartCounter);
-      EEPROM.commit();
-      vTaskDelay(3.3 / portTICK_PERIOD_MS); // EEPROM needs 3.3ms to write          
-  }
 }
 
 void check_restart_count(){
@@ -936,13 +895,12 @@ BLYNK_CONNECTED() {
   Blynk.virtualWrite(V8, ssid);
   if(disconnection_count == 0)
     Blynk.virtualWrite(V15, "Not yet");
-  else  
-    Blynk.virtualWrite(V15, disconnected_ts);
   Blynk.virtualWrite(V16, disconnection_count);
 }
 
 BLYNK_DISCONNECTED() {
     disconnection_count++;
+    write16bitIntoEEPROM(disconnCounterAddress,disconnection_count);
     disconnected_ts = get_timestamp();
     Serial.println("[ESP32_AASAS_UiTM_WiFi_IoT] Blynk Disconnected");
     if(GROVE_LCD_AVAILABLE){
@@ -959,7 +917,8 @@ BLYNK_DISCONNECTED() {
       lcd.print("> Blynk.begin()"); // print connected SSID
       delay(1000);
     }
-    Blynk.begin(auth, ssid, pass);
+    Blynk.begin(auth, ssid, pass); // must have logic to restart handshake with Blynk 10 Feb 2023
+    Blynk.virtualWrite(V15, disconnected_ts); // immediately post to blynk
 }
 
 BLYNK_RESTART(){
