@@ -2,7 +2,7 @@
 Testing UiTM WiFi IoT 9/12/2022 Friday
 Works with ESP32S2
 Edited 28 Dec 2022
-Subscribed to Blynk Plus RM30.90/month on Monday 13Feb2023
+Subscribed to Blynk Plus RM30.90/month on Monday 13 Feb 2023
 */
 // #define ESP32S2_1
 // #define ESP32S2_2
