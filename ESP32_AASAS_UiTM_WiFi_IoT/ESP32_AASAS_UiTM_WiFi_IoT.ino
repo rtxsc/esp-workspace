@@ -7,8 +7,8 @@ Subscribed to Blynk Plus RM30.90/month on Monday 13 Feb 2023
 // #define ESP32S2_1
 // #define ESP32S2_2
 // #define ESP32S2_4
-// #define ESP32S2_5
-#define ESP32S2_6
+#define ESP32S2_5
+// #define ESP32S2_6
 
 /* Comment this out to disable prints and save space */
 #define BLYNK_PRINT Serial
@@ -31,9 +31,6 @@ Subscribed to Blynk Plus RM30.90/month on Monday 13 Feb 2023
   #define BLYNK_DEVICE_NAME "AASAS M06"
   #define BLYNK_AUTH_TOKEN "qtER7nxNJH1QioLqmH_rE688VdJ5i0L0"
 #endif
-
-
-
 
 #include <Wire.h>
 #include "rgb_lcd.h"
@@ -68,15 +65,8 @@ Subscribed to Blynk Plus RM30.90/month on Monday 13 Feb 2023
 #else
   #define ONBOARD_LED 2
 #endif
-//#define BLYNK_AUTH_TOKEN "3G4XbLzWHurLKwzeAeKQZH7QttvcM9gR"   // AASAS ONE SERVER
-//#define BLYNK_AUTH_TOKEN "WMPQFiXeWmh7xHHUsngi8oyIHO4bG47D"   // AASAS TWO SERVER
 
-// You should get Auth Token in the Blynk App.
-// Go to the Project Settings (nut icon).
 char auth[] = BLYNK_AUTH_TOKEN;
-
-// Your WiFi credentials.
-// Set password to "" for open networks.
 char ssid[] = "UiTM WiFi IoT";
 char pass[] = ""; // leave this empty as this is an open network
 
@@ -115,7 +105,6 @@ bool INA219_AVAILABLE = false;
 #define FAST_DELAY              1000
 
 int restartCounter;      // value will be loaded from EEPROM
-int prev_restartCounter;
 int disconnection_count = 0;
 
 byte tick = 0;
@@ -418,7 +407,7 @@ void try_wifi_connect(int timeout){
       lcd.print("-WiFi Connected-");
       lcd.setCursor(0,1);
       lcd.print("--UiTM WiFi IoT-");
-      delay(100);
+      delay(1000);
       // vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
@@ -557,7 +546,8 @@ void clear_disconnCounter(){
     Blynk.virtualWrite(V16, 0); // disconnection counter reset to zero
     // EEPROM.write(restartCounterAddress, 255);
     EEPROM.commit();
- 
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+
 }
 
  void clear_restartCounter(){
@@ -569,7 +559,7 @@ void clear_disconnCounter(){
       lcd.print("-Restarting Now-");
     }
     Serial.println("@@@@@@@@@@@@@@@@@@ CLEARING Reset Counter @@@@@@@@@@@@@@@@@@ ");
-    write16bitIntoEEPROM(restartCounterAddress,255);
+    write16bitIntoEEPROM(restartCounterAddress,0);
     // EEPROM.write(restartCounterAddress, 255);
     EEPROM.commit();
     vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -578,39 +568,14 @@ void clear_disconnCounter(){
 }
 
 void check_restart_count(){
-  if(restartCounter==255 ){
-    // lcd.print("IT'S NEW NODE");
-    // lcd.setCursor(0, 1); // row 1, column 0
-    // lcd.print("Reset Rc Counter"); // Reboot 000 times
-    // vTaskDelay(FAST_DELAY / portTICK_PERIOD_MS);
-    // lcd.clear();
-    restartCounter = 0;
-    // EEPROM.write(restartCounterAddress, restartCounter);
-    write16bitIntoEEPROM(restartCounterAddress,restartCounter);
-    EEPROM.commit();
-    vTaskDelay(3.3 / portTICK_PERIOD_MS); // EEPROM needs 3.3ms to write
-
+  if(restartCounter == 0 ){
+      Serial.println("[INFO] New deployment node. Restart count is NULL");
   }
   else{
-      Serial.println("just a normal reboot or restart");
-      // lcd.setCursor(0, 0); 
-      // lcd.print("REBOOTED NODE");
-      // lcd.setCursor(0, 1); // row 1, column 0
-      // lcd.print("Restarted "+String(restartCounter) + " tms");
-      // vTaskDelay(FAST_DELAY / portTICK_PERIOD_MS);
-      // lcd.clear();
-      
-      prev_restartCounter = restartCounter; // for the comparison later on
+      Serial.println("[INFO] Normal reboot or restart");
       restartCounter += 1;  // increment rst count by 1 for each reboot
       Serial.printf("the current restart count is %d\n", restartCounter);
-      // lcd.setCursor(0, 0); 
-      // lcd.print("--WELCOME BACK--"); 
-      // lcd.setCursor(0, 1); // row 1, column 0
-      // lcd.print("Current RST "+String(restartCounter) + " times"); // load current rst count
-      // vTaskDelay(FAST_DELAY / portTICK_PERIOD_MS);
-      // lcd.clear();
       write16bitIntoEEPROM(restartCounterAddress,restartCounter);
-      // EEPROM.write(restartCounterAddress, restartCounter);
       EEPROM.commit();
       vTaskDelay(3.3 / portTICK_PERIOD_MS); // EEPROM needs 3.3ms to write          
   }
@@ -620,14 +585,7 @@ void init_eeprom(){
 
   if (!EEPROM.begin(EEPROM_SIZE))
   {
-    // lcd.clear();
-    // lcd.setCursor(0, 0); 
-    // lcd.print("-CRITICAL ERROR-");
-    // lcd.setCursor(0, 1); 
-    // lcd.print("-EEPROM  FAILED-");
-    // vTaskDelay(1000000 / portTICK_PERIOD_MS);
     Serial.println("failed to initialise EEPROM"); delay(1000000);
-
   }
 
   Serial.println(" bytes read from Flash:");
@@ -858,29 +816,49 @@ void BLYNK_TASK(){
     Blynk.virtualWrite(V10, tempC);
     Blynk.virtualWrite(V11, humid);
     Blynk.virtualWrite(V12, jsonWeather);
+    
+    if(GROVE_LCD_AVAILABLE)
+      lcd.clear();
 
     if(tick % 2 == 0){
-      lcd.clear();
-      lcd.setCursor(0,0); // row 0, column 0
-      lcd.print("----"+ String(BLYNK_DEVICE_NAME)+"---"); // ----AASAS ONE---
+      if(GROVE_LCD_AVAILABLE){
+        lcd.setCursor(0,0); // row 0, column 0
+        lcd.print("----"+ String(BLYNK_DEVICE_NAME)+"---"); // ----AASAS ONE---
+        lcd.setCursor(0,1);
+        lcd.print(dateTime);
+      }
     }
     else if(tick % 5 == 0){
-      lcd.clear();
-      lcd.setCursor(0,0); // row 0, column 0
-      lcd.print(ssid); // print connected SSID
+      if(GROVE_LCD_AVAILABLE){
+        lcd.setCursor(0,0); // row 0, column 0
+        lcd.print(ssid); // print connected SSID
+        lcd.setCursor(0,1);
+        lcd.print(dateTime);
+      }
     }
-    else if(tick % 10 == 0){
-      lcd.clear();
-      lcd.setCursor(0,0); // row 0, column 0
-      lcd.print(esp_model); // print connected SSID
-      lcd.setCursor(0,1); // row 0, column 0
-      lcd.print(mac_str); // print connected SSID
+    else if(tick % 7 == 0){
+      if(GROVE_LCD_AVAILABLE){
+        lcd.setCursor(0,0); // row 0, column 0
+        lcd.print(esp_model); // print connected SSID
+        lcd.setCursor(0,1); // row 0, column 0
+        lcd.print(mac_str); // print connected SSID
+      }
+    }
+    else if(tick % 11 == 0){
+      if(GROVE_LCD_AVAILABLE){
+        lcd.setCursor(0,0); // row 0, column 0
+        lcd.print("RSSI: "+String(RSSI_dBm)+" dBm"); // print connected SSID
+        lcd.setCursor(0,1); // row 0, column 0
+        lcd.print(get_rssi_state(RSSI_dBm)); // print connected SSID
+      }
     }
     else{
-      display_uptime_top_row();
-    }
-    lcd.setCursor(0,1);
-    lcd.print(dateTime);
+      if(GROVE_LCD_AVAILABLE){
+        display_uptime_top_row();
+        lcd.setCursor(0,1); // row 0, column 0
+        lcd.print(dateTime);
+      }
+    }    
 }
 
 BLYNK_CONNECTED() {
@@ -931,9 +909,9 @@ BLYNK_RESTART(){
   if(GROVE_LCD_AVAILABLE){
     lcd.clear();
     lcd.setCursor(0,0); // row 0, column 0
-    lcd.print("Blynk Restart"); // print connected SSID
+    lcd.print("-Blynk Restart!-"); // print connected SSID
     lcd.setCursor(0,1); // row 0, column 0
-    lcd.print("Force Restart"); // print connected SSID
+    lcd.print("-Force Restart!-"); // print connected SSID
     delay(1000);
   }
 }
