@@ -3,11 +3,12 @@ Testing UiTM WiFi IoT 9/12/2022 Friday
 Works with ESP32S2
 Edited 28 Dec 2022
 Subscribed to Blynk Plus RM30.90/month on Monday 13 Feb 2023
+Connected and Disconnected logic furnished 15 Feb 2023
 */
 // #define ESP32S2_1
-// #define ESP32S2_2
+#define ESP32S2_2
 // #define ESP32S2_4
-#define ESP32S2_5
+// #define ESP32S2_5
 // #define ESP32S2_6
 
 /* Comment this out to disable prints and save space */
@@ -33,6 +34,7 @@ Subscribed to Blynk Plus RM30.90/month on Monday 13 Feb 2023
 #endif
 
 #include <Wire.h>
+#include<ADS1115_WE.h> 
 #include "rgb_lcd.h"
 
 #include <WiFi.h>
@@ -76,12 +78,20 @@ char pass[] = ""; // leave this empty as this is an open network
 // char ssid[] = "Maxis_128_5G";
 // char pass[] = "respironics"; // leave this empty as this is an open network
 
+#define I2C_SDA                 41
+#define I2C_SCL                 40
+#define restartCounterAddress   0x0F // 15 & 16 : 2 bytes F 10 11
+#define disconnCounterAddress   0x12 // 18 & 19 bytes
+#define disconnectTS__Address   0x14 // 21 and beyond 
+#define ADS_I2C_ADDRESS         0x48
 WiFiUDP             ntpUDP;
 NTPClient           timeClient(ntpUDP);
 BlynkTimer          timer;
 Adafruit_NeoPixel   pixels(NUMPIXELS, RGB);
 Adafruit_INA219     ina219_A;
 rgb_lcd             lcd;
+ADS1115_WE          adc = ADS1115_WE(ADS_I2C_ADDRESS);
+
 
 // Variables to save date and time
 String formattedDate;
@@ -89,6 +99,7 @@ String dayStamp;
 String timeStamp;
 String restart_ts = "None";
 String disconnected_ts = "None";
+String hostname = BLYNK_DEVICE_NAME;
 
 float shuntvoltage;
 float busvoltage;
@@ -96,16 +107,13 @@ float current_mA;
 
 bool GROVE_LCD_AVAILABLE = false;
 bool INA219_AVAILABLE = false;
+bool ADS1115_AVAILABLE = false;
 
-#define I2C_SDA                 41
-#define I2C_SCL                 40
-#define restartCounterAddress   0x0F // 15 & 16 : 2 bytes
-#define disconnCounterAddress   0x12 
-#define EEPROM_SIZE             32
+#define EEPROM_SIZE             48
 #define FAST_DELAY              1000
 
 int restartCounter;      // value will be loaded from EEPROM
-int disconnection_count = 0;
+int disconnection_count; // value will be loaded from EEPROM
 
 byte tick = 0;
 
@@ -261,6 +269,13 @@ void setup()
     delay(1000);
     lcd.clear();
   }  
+
+  if(ADS1115_AVAILABLE){
+    if(!adc.init()){
+      Serial.println("ADS1115 not connected!");
+    }
+    adc.setVoltageRange_mV(ADS1115_RANGE_4096); //comment line/change parameter to change range
+  }
   
   init_eeprom();
   // restartCounter = EEPROM.read(restartCounterAddress);
@@ -281,6 +296,8 @@ void setup()
   #endif
   off_onboard_led();
   WiFi.mode(WIFI_STA); //Optional
+  WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
+  WiFi.setHostname(hostname.c_str()); //define hostname
   if(GROVE_LCD_AVAILABLE){
     try_wifi_connect(10); // pre-connection using WiFi.begin() with 10 second default timeout
     lcd.clear();
@@ -290,11 +307,25 @@ void setup()
     lcd.write(1); // add arrow before SSID
     lcd.print(ssid);
   }
+
+  if(GROVE_LCD_AVAILABLE){
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print("Init TimeClient!");
+    lcd.setCursor(0,1);
+    lcd.print("-Get restart ts!");
+  }
   // 30 Dec 2022 Friday | Polished 10 Feb 2023 Friday
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/Adapters/BlynkArduinoClient.h (to fix connecting to blynk.cloud:80 infinite loop)
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/Blynk/BlynkProtocol.h (to edit logo)
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/BlynkSimpleEsp32.h (to edit Blynk.begin method)
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/Blynk/BlynkHandlers.h (BLYNK define methods)
+  Serial.print("ESP32 NEW HOSTNAME: ");
+  Serial.println(WiFi.getHostname());   /*New Hostname printed*/ 
+  
+  timeClient.begin();
+  timeClient.setTimeOffset(28800);
+  restart_ts = get_timestamp(); // must be called after timeClient.begin() for the restart timestamp
 
   Blynk.begin(auth, ssid, pass); // connectWiFi in Blynk is active. meaning connecting twice
 
@@ -309,7 +340,7 @@ void setup()
   pixels.begin(); 
   loopRGB();
   rgbOff();
-  timeClient.begin();
+ 
   timer.setInterval(1000L, BLYNK_TASK);
   timer.setInterval(1000L, get_weather);
 }
@@ -531,6 +562,32 @@ int read16bitFromEEPROM(int address)
   return (EEPROM.read(address) << 8) + EEPROM.read(address + 1);
 }
 
+void writeStringToEEPROM(int addrOffset, const String &strToWrite)
+{
+  byte len = strToWrite.length();
+  EEPROM.write(addrOffset, len);
+
+  for (int i = 0; i < len; i++)
+  {
+    EEPROM.write(addrOffset + 1 + i, strToWrite[i]);
+  }
+}
+
+String readStringFromEEPROM(int addrOffset)
+{
+  int newStrLen = EEPROM.read(addrOffset);
+  char data[newStrLen + 1];
+
+  for (int i = 0; i < newStrLen; i++)
+  {
+    data[i] = EEPROM.read(addrOffset + 1 + i);
+  }
+  data[newStrLen] = '\ 0'; // !!! NOTE !!! Remove the space between the slash "/" and "0" (I've added a space because otherwise there is a display bug)
+
+  return String(data);
+}
+
+
 
 void clear_disconnCounter(){
     if(GROVE_LCD_AVAILABLE){
@@ -568,13 +625,18 @@ void clear_disconnCounter(){
 }
 
 void check_restart_count(){
-  if(restartCounter == 0 ){
+  if(restartCounter == 0){
       Serial.println("[INFO] New deployment node. Restart count is NULL");
+      restartCounter += 1; // initial increment [compulsory]
+      Serial.printf("[INFO] Initial restart count is ONE = %d\n", restartCounter);
+      write16bitIntoEEPROM(restartCounterAddress,restartCounter);
+      EEPROM.commit();
+      vTaskDelay(3.3 / portTICK_PERIOD_MS); // EEPROM needs 3.3ms to write   
   }
   else{
       Serial.println("[INFO] Normal reboot or restart");
       restartCounter += 1;  // increment rst count by 1 for each reboot
-      Serial.printf("the current restart count is %d\n", restartCounter);
+      Serial.printf("[INFO] the current restart count is %d\n", restartCounter);
       write16bitIntoEEPROM(restartCounterAddress,restartCounter);
       EEPROM.commit();
       vTaskDelay(3.3 / portTICK_PERIOD_MS); // EEPROM needs 3.3ms to write          
@@ -591,7 +653,10 @@ void init_eeprom(){
   Serial.println(" bytes read from Flash:");
   for (int i = 0; i < EEPROM_SIZE; i++)
   {
-    if(i== 15 || i==16){
+    if(i >= 21){
+      Serial.print("Disconnected Timestamp String Memory "); Serial.print(i);   Serial.print(":");
+    }
+    else if(i== 15 || i==16){
         Serial.print("Restart Count Memory "); Serial.print(i);   Serial.print(":");
     }else if (i== 18 || i==19){
         Serial.print("Disconnection Count Memory "); Serial.print(i);   Serial.print(":");
@@ -643,6 +708,8 @@ void i2c_scan() {
       Serial.println(address,HEX);
       if(address == 0x3E) GROVE_LCD_AVAILABLE = true;
       if(address == 0x40) INA219_AVAILABLE    = true;
+      if(address == 0x48) ADS1115_AVAILABLE   = true;
+
       nDevices++;
     }
     else if (error==4) {
@@ -794,10 +861,30 @@ String httpGETRequest(const char* serverName) {
 
   return payload;
 }
+
+
+void read_ads1115(){
+  float ch0 = readChannel(ADS1115_COMP_0_GND);   // turbidity sensor   
+  float ch1 = readChannel(ADS1115_COMP_1_GND);   // V16 takeover from GPS char count
+  float ch2 = readChannel(ADS1115_COMP_2_GND);   // V41 takeover from GPS fix age
+  float ch3 = readChannel(ADS1115_COMP_3_GND);   // V27 takeover from Sat in Use
+  String ads_readout = "ch0: "+ String(ch0)+" mV ch1: "+ String(ch1,0)+" mV ch2: "+ String(ch2)+" mV ch3: "+ String(ch3)+" mV";
+  Blynk.virtualWrite(V18, ads_readout);
+}
+
+float readChannel(ADS1115_MUX channel) {
+  float voltage = 0.0;
+  adc.setCompareChannels(channel);
+  adc.startSingleMeasurement();
+  while(adc.isBusy()){}
+  voltage = adc.getResult_mV(); // alternative: getResult_mV for Millivolt
+  return voltage;
+}
   
 void BLYNK_TASK(){
     tick++; // to replace tick
     getINA219();
+    if(ADS1115_AVAILABLE) read_ads1115(); //   Blynk.virtualWrite(V18, ads_readout) happening inside func
     if(tick % 3 == 0)
       on_onboard_led();
     else
@@ -870,22 +957,30 @@ BLYNK_CONNECTED() {
     lcd.print("Device is Online"); // print connected SSID
     delay(1000);
   }
-  timeClient.setTimeOffset(28800);
-  restart_ts = get_timestamp();
+  String blynk_on_connected_ts = get_timestamp();
   Blynk.syncVirtual(V20,V21,V22,V23,V24,V25,V26);
   Blynk.virtualWrite(V2, WiFi.localIP().toString());
   Blynk.virtualWrite(V3, restart_ts); 
   Blynk.virtualWrite(V5, restartCounter);
   Blynk.virtualWrite(V8, ssid);
+  String disconn_ts_str = readStringFromEEPROM(disconnectTS__Address);
+  Serial.print("The disconnection timestamp from EEPROM: ");
+  Serial.println(disconn_ts_str);
   if(disconnection_count == 0)
     Blynk.virtualWrite(V15, "Not yet");
+  else
+    Blynk.virtualWrite(V15, disconn_ts_str);
+  disconnection_count = read16bitFromEEPROM(disconnCounterAddress);
   Blynk.virtualWrite(V16, disconnection_count);
+  Blynk.virtualWrite(V17, blynk_on_connected_ts); 
+
 }
 
 BLYNK_DISCONNECTED() {
     disconnection_count++;
     write16bitIntoEEPROM(disconnCounterAddress,disconnection_count);
     disconnected_ts = get_timestamp();
+    writeStringToEEPROM(disconnectTS__Address, disconnected_ts);
     Serial.println("[ESP32_AASAS_UiTM_WiFi_IoT] Blynk Disconnected");
     if(GROVE_LCD_AVAILABLE){
       lcd.clear();
@@ -902,7 +997,6 @@ BLYNK_DISCONNECTED() {
       delay(1000);
     }
     Blynk.begin(auth, ssid, pass); // must have logic to restart handshake with Blynk 10 Feb 2023
-    Blynk.virtualWrite(V15, disconnected_ts); // immediately post to blynk
 }
 
 BLYNK_RESTART(){
