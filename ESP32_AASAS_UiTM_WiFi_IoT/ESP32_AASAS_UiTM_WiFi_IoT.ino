@@ -5,8 +5,8 @@ Edited 28 Dec 2022
 Subscribed to Blynk Plus RM30.90/month on Monday 13 Feb 2023
 Connected and Disconnected logic furnished 15 Feb 2023
 */
-// #define ESP32S2_1
-#define ESP32S2_2
+#define ESP32S2_1
+// #define ESP32S2_2
 // #define ESP32S2_4
 // #define ESP32S2_5
 // #define ESP32S2_6
@@ -80,10 +80,12 @@ char pass[] = ""; // leave this empty as this is an open network
 
 #define I2C_SDA                 41
 #define I2C_SCL                 40
+#define wifiConnRetryAddress    0x0C // 12 & 13 : 2 bytes 
 #define restartCounterAddress   0x0F // 15 & 16 : 2 bytes F 10 11
 #define disconnCounterAddress   0x12 // 18 & 19 bytes
 #define disconnectTS__Address   0x14 // 21 and beyond 
 #define ADS_I2C_ADDRESS         0x48
+
 WiFiUDP             ntpUDP;
 NTPClient           timeClient(ntpUDP);
 BlynkTimer          timer;
@@ -92,7 +94,6 @@ Adafruit_INA219     ina219_A;
 rgb_lcd             lcd;
 ADS1115_WE          adc = ADS1115_WE(ADS_I2C_ADDRESS);
 
-
 // Variables to save date and time
 String formattedDate;
 String dayStamp;
@@ -100,6 +101,7 @@ String timeStamp;
 String restart_ts = "None";
 String disconnected_ts = "None";
 String hostname = BLYNK_DEVICE_NAME;
+String default_hostname = "None";
 
 float shuntvoltage;
 float busvoltage;
@@ -114,8 +116,10 @@ bool ADS1115_AVAILABLE = false;
 
 int restartCounter;      // value will be loaded from EEPROM
 int disconnection_count; // value will be loaded from EEPROM
+int wifiRetryCount = -1 ; // value will be loaded from EEPROM
 
 byte tick = 0;
+byte red, green, blue;
 
 byte degree_symbol[8] = {
     0b00110,
@@ -171,9 +175,8 @@ BLYNK_WRITE(V25);
 BLYNK_WRITE(V26);
 
 void BLYNK_TASK();
-void init_eeprom();
 void i2c_scan();
-String get_timestamp();
+void initINA219();
 void init_eeprom();
 void off_onboard_led();
 void on_onboard_led();
@@ -194,6 +197,7 @@ void onRelay3();
 void offRelay1();
 void offRelay2();
 void offRelay3();
+String get_timestamp();
 
 bool openNetwork = false;
 
@@ -278,10 +282,13 @@ void setup()
   }
   
   init_eeprom();
+  // write16bitIntoEEPROM(wifiConnRetryAddress, 0); // comment this after debugging || the first upload
+
   // restartCounter = EEPROM.read(restartCounterAddress);
   restartCounter = read16bitFromEEPROM(restartCounterAddress);
   disconnection_count = read16bitFromEEPROM(disconnCounterAddress);
-
+  wifiRetryCount = read16bitFromEEPROM(wifiConnRetryAddress);
+  if(wifiRetryCount > 65535) wifiRetryCount = 0;
   check_restart_count();
 
   pinMode(ONBOARD_LED, OUTPUT);
@@ -295,9 +302,20 @@ void setup()
     pinMode(B,OUTPUT);
   #endif
   off_onboard_led();
+  delay(1000);
+
+  // WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
+  // Serial.print("ESP32 hostname before calling setting WiFi_STA: ");
+  // Serial.println(default_hostname);   /*New Hostname printed*/ 
+
   WiFi.mode(WIFI_STA); //Optional
-  WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
-  WiFi.setHostname(hostname.c_str()); //define hostname
+  default_hostname = WiFi.getHostname();
+
+  // WiFi.setHostname(hostname.c_str());
+  // Serial.print("ESP32 hostname after changing hostname: ");
+  Serial.print("ESP32 hostname after calling setting WiFi_STA: ");
+  Serial.println(default_hostname);   /*New Hostname printed*/ 
+
   if(GROVE_LCD_AVAILABLE){
     try_wifi_connect(10); // pre-connection using WiFi.begin() with 10 second default timeout
     lcd.clear();
@@ -321,7 +339,7 @@ void setup()
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/BlynkSimpleEsp32.h (to edit Blynk.begin method)
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/Blynk/BlynkHandlers.h (BLYNK define methods)
   Serial.print("ESP32 NEW HOSTNAME: ");
-  Serial.println(WiFi.getHostname());   /*New Hostname printed*/ 
+  Serial.println(default_hostname);   /*New Hostname printed*/ 
   
   timeClient.begin();
   timeClient.setTimeOffset(28800);
@@ -353,6 +371,9 @@ void loop()
 }
 
 void try_wifi_connect(int timeout){
+    wifiRetryCount++;
+    write16bitIntoEEPROM(wifiConnRetryAddress, wifiRetryCount);
+
     int init_index_right = 9; // init 8 + 1 offset
     int init_index_left = 6; // init 7 - 1 offset
     int column_index_right = init_index_right; 
@@ -369,6 +390,8 @@ void try_wifi_connect(int timeout){
       openNetwork = false;
     }
     WiFi.begin(ssid, pass); // normal connect method
+    lcd.setCursor(0, 0); // row 1, column 0
+    lcd.print("Conn Retry:" +String(wifiRetryCount));  
     while (WiFi.status() != WL_CONNECTED) {
           tick++;
           Serial.printf("/");
@@ -396,14 +419,17 @@ void try_wifi_connect(int timeout){
             lcd.clear();
             if(millis()/1000 % 2 == 0){
                 lcd.setCursor(0, 0); // row 1, column 0
-                lcd.print("Connecting WiFi");  
+                lcd.print("Conn Retry:" +String(wifiRetryCount));  
+                lcd.setCursor(0, 1); // row 1, column 0
+                lcd.print(default_hostname);
+                delay(1000);
                 off_onboard_led();
 
             }
             else if(millis()/1000 % 3 == 0 || millis()/1000 % 5 == 0){
                 lcd.clear();
                 lcd.setCursor(0, 0); // row 1, column 0
-                lcd.print("Network Type");  
+                lcd.print("Connecting WiFi");
                 lcd.setCursor(0, 1); // row 1, column 0
                 if(openNetwork) lcd.print("    Open Network");  
                 else            lcd.print("   Close Network");  
@@ -432,6 +458,7 @@ void try_wifi_connect(int timeout){
           ESP.restart();
       }
     }
+   
     if(GROVE_LCD_AVAILABLE){
       lcd.clear();
       lcd.setCursor(0,0);
@@ -485,7 +512,7 @@ void loopRGB(){
   pixels.setPixelColor(0, pixels.Color(0, 0, 0));
   pixels.show();   
   delay(DELAYVAL); 
-   pixels.setPixelColor(0, pixels.Color(0, 0, 0));
+  pixels.setPixelColor(0, pixels.Color(0, 0, 0));
   pixels.show();   
   delay(DELAYVAL); 
 }
@@ -507,6 +534,48 @@ void onRelay3(){
 }
 void offRelay3(){
   digitalWrite(IN3,0);
+}
+
+
+void setRGB_from_RSSI(int rssi){
+
+  /*
+  good segment
+  if(rssi > -30) out = "Perfect signal";  // 0 -> -30
+  else if(rssi > -50) out = "Excellent signal"; -30 -> -50
+  
+  average segment
+  else if(rssi > -60) out = "Good reliable signal"; -50 -> -60
+  else if(rssi > -67) out = "Voice and Non-HD vid"; -60 -> -67
+  else if(rssi > -70) out = "Light browsing and email"; -67 -> -70
+
+  bad segment
+  else if(rssi > -80) out = "Unstable connection"; -70 -> -80
+  else                out = "Unlikely connection"; -80 -> -120
+
+  */
+  if(rssi < -70){
+    red = map(rssi,-120,-69,255,128); // towards red
+    // green = map(red,128,255,128,0); // change according to red for transition 
+    green = 0;   
+    blue = 0; // stay off
+  }
+  else if(rssi >= -70 && rssi < -50){
+    green = 255; // towards green    
+  }
+  else{
+    red = 0; // stay off
+    blue = map(rssi,-50,0,128,255); // towards blue
+    green = map(blue,128,255,128,0); // change according to blue for transition    
+  }
+    
+}
+
+void mapRGBtoRSSI(byte r, byte g, byte b){
+  #ifndef ESP32C3
+    pixels.setPixelColor(0, pixels.Color(r, g, b));
+    pixels.show(); 
+  #endif
 }
 
 void redOn(){
@@ -555,6 +624,8 @@ void write16bitIntoEEPROM(int address, int number)
 { 
   EEPROM.write(address, number >> 8);
   EEPROM.write(address + 1, number & 0xFF);
+  EEPROM.commit();
+  delay(5);
 }
 
 int read16bitFromEEPROM(int address)
@@ -571,6 +642,9 @@ void writeStringToEEPROM(int addrOffset, const String &strToWrite)
   {
     EEPROM.write(addrOffset + 1 + i, strToWrite[i]);
   }
+  EEPROM.commit();
+  delay(5);
+
 }
 
 String readStringFromEEPROM(int addrOffset)
@@ -582,12 +656,22 @@ String readStringFromEEPROM(int addrOffset)
   {
     data[i] = EEPROM.read(addrOffset + 1 + i);
   }
-  data[newStrLen] = '\ 0'; // !!! NOTE !!! Remove the space between the slash "/" and "0" (I've added a space because otherwise there is a display bug)
+  data[newStrLen] = '\0'; // !!! NOTE !!! Remove the space between the slash "\" and "0" (I've added a space because otherwise there is a display bug)
 
   return String(data);
 }
 
-
+void clear_wifiRetryCounter(){
+  if(GROVE_LCD_AVAILABLE){
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("Reset WiFi Retry!");
+      lcd.setCursor(0,1);
+      lcd.print("-Restarting Now-");
+    }
+    Serial.println("@@@@@@@@@@@@@@@@@@ CLEARING WiFi Retry Counter @@@@@@@@@@@@@@@@@@ ");
+    write16bitIntoEEPROM(wifiConnRetryAddress,0);
+}
 
 void clear_disconnCounter(){
     if(GROVE_LCD_AVAILABLE){
@@ -598,12 +682,12 @@ void clear_disconnCounter(){
       lcd.print("-Restarting Now-");
     }
     Serial.println("@@@@@@@@@@@@@@@@@@ CLEARING Disconnection Counter @@@@@@@@@@@@@@@@@@ ");
-    write16bitIntoEEPROM(disconnCounterAddress,0);
-    Blynk.virtualWrite(V15, "Cleared Disconn Counter");
+    disconnection_count = 0; // reset the global value here 17 Feb Friday
+    write16bitIntoEEPROM(disconnCounterAddress,disconnection_count);
+
+    Blynk.virtualWrite(V15, "Cleared DC Counter");
     Blynk.virtualWrite(V16, 0); // disconnection counter reset to zero
     // EEPROM.write(restartCounterAddress, 255);
-    EEPROM.commit();
-    vTaskDelay(10 / portTICK_PERIOD_MS);
 
 }
 
@@ -618,8 +702,6 @@ void clear_disconnCounter(){
     Serial.println("@@@@@@@@@@@@@@@@@@ CLEARING Reset Counter @@@@@@@@@@@@@@@@@@ ");
     write16bitIntoEEPROM(restartCounterAddress,0);
     // EEPROM.write(restartCounterAddress, 255);
-    EEPROM.commit();
-    vTaskDelay(10 / portTICK_PERIOD_MS);
     ESP.restart();
  
 }
@@ -630,16 +712,12 @@ void check_restart_count(){
       restartCounter += 1; // initial increment [compulsory]
       Serial.printf("[INFO] Initial restart count is ONE = %d\n", restartCounter);
       write16bitIntoEEPROM(restartCounterAddress,restartCounter);
-      EEPROM.commit();
-      vTaskDelay(3.3 / portTICK_PERIOD_MS); // EEPROM needs 3.3ms to write   
   }
   else{
       Serial.println("[INFO] Normal reboot or restart");
       restartCounter += 1;  // increment rst count by 1 for each reboot
       Serial.printf("[INFO] the current restart count is %d\n", restartCounter);
       write16bitIntoEEPROM(restartCounterAddress,restartCounter);
-      EEPROM.commit();
-      vTaskDelay(3.3 / portTICK_PERIOD_MS); // EEPROM needs 3.3ms to write          
   }
 }
 
@@ -650,21 +728,24 @@ void init_eeprom(){
     Serial.println("failed to initialise EEPROM"); delay(1000000);
   }
 
-  Serial.println(" bytes read from Flash:");
-  for (int i = 0; i < EEPROM_SIZE; i++)
-  {
-    if(i >= 21){
-      Serial.print("Disconnected Timestamp String Memory "); Serial.print(i);   Serial.print(":");
-    }
-    else if(i== 15 || i==16){
-        Serial.print("Restart Count Memory "); Serial.print(i);   Serial.print(":");
-    }else if (i== 18 || i==19){
-        Serial.print("Disconnection Count Memory "); Serial.print(i);   Serial.print(":");
-    }else{
-        Serial.print("R "); Serial.print(i);   Serial.print(":");
-    }
-    Serial.print(byte(EEPROM.read(i))); Serial.println();
-  }
+  // Serial.println(" bytes read from Flash:");
+  // for (int i = 0; i < EEPROM_SIZE; i++)
+  // {
+  //   if(i >= 21){
+  //     Serial.print("Disconnected Timestamp String Memory "); Serial.print(i);   Serial.print(":");
+  //   }
+  //   // else if(i== 12 || i==13){
+  //   //     Serial.print("WiFi Retry Count Memory "); Serial.print(i);   Serial.print(":");
+  //   // }
+  //   // else if(i== 15 || i==16){
+  //   //     Serial.print("Restart Count Memory "); Serial.print(i);   Serial.print(":");
+  //   // }else if (i== 18 || i==19){
+  //   //     Serial.print("Disconnection Count Memory "); Serial.print(i);   Serial.print(":");
+  //   // }else{
+  //   //     Serial.print("R "); Serial.print(i);   Serial.print(":");
+  //   // }
+  //   Serial.print(byte(EEPROM.read(i))); Serial.println();
+  // }
   Serial.println();
 }
 
@@ -884,7 +965,10 @@ float readChannel(ADS1115_MUX channel) {
 void BLYNK_TASK(){
     tick++; // to replace tick
     getINA219();
-    if(ADS1115_AVAILABLE) read_ads1115(); //   Blynk.virtualWrite(V18, ads_readout) happening inside func
+    if(ADS1115_AVAILABLE) 
+      read_ads1115(); //   Blynk.virtualWrite(V18, ads_readout) happening inside func
+    else
+      Blynk.virtualWrite(V18, "ADS1115 Not Connected");
     if(tick % 3 == 0)
       on_onboard_led();
     else
@@ -893,6 +977,11 @@ void BLYNK_TASK(){
     // Serial.print("Datetime:");
     // Serial.println(dateTime);
     int RSSI_dBm =  WiFi.RSSI();
+    setRGB_from_RSSI(RSSI_dBm);
+    if(millis() % 2 == 0)
+      mapRGBtoRSSI(red, green, blue);
+    else
+      rgbOff();
     
     Blynk.virtualWrite(V0,uptime_formatter::getUptime());
     Blynk.virtualWrite(V1, dateTime);
@@ -949,6 +1038,7 @@ void BLYNK_TASK(){
 }
 
 BLYNK_CONNECTED() {
+  blueOn();
   if(GROVE_LCD_AVAILABLE){
     lcd.clear();
     lcd.setCursor(0,0); // row 0, column 0
@@ -957,6 +1047,9 @@ BLYNK_CONNECTED() {
     lcd.print("Device is Online"); // print connected SSID
     delay(1000);
   }
+  Blynk.virtualWrite(V19, wifiRetryCount);
+  wifiRetryCount = 0; // reset this back for the next cycle
+  write16bitIntoEEPROM(wifiConnRetryAddress, wifiRetryCount);
   String blynk_on_connected_ts = get_timestamp();
   Blynk.syncVirtual(V20,V21,V22,V23,V24,V25,V26);
   Blynk.virtualWrite(V2, WiFi.localIP().toString());
@@ -973,14 +1066,16 @@ BLYNK_CONNECTED() {
   disconnection_count = read16bitFromEEPROM(disconnCounterAddress);
   Blynk.virtualWrite(V16, disconnection_count);
   Blynk.virtualWrite(V17, blynk_on_connected_ts); 
-
+  Blynk.virtualWrite(V29, default_hostname); 
 }
 
 BLYNK_DISCONNECTED() {
+    redOn();
     disconnection_count++;
     write16bitIntoEEPROM(disconnCounterAddress,disconnection_count);
     disconnected_ts = get_timestamp();
     writeStringToEEPROM(disconnectTS__Address, disconnected_ts);
+  
     Serial.println("[ESP32_AASAS_UiTM_WiFi_IoT] Blynk Disconnected");
     if(GROVE_LCD_AVAILABLE){
       lcd.clear();
@@ -1008,6 +1103,11 @@ BLYNK_RESTART(){
     lcd.print("-Force Restart!-"); // print connected SSID
     delay(1000);
   }
+  disconnection_count = 0; // reset the global value here 17 Feb Friday
+  // this is essential so that at every restart cycle disconnection counter will revert to zero
+  // this means disconnection counter will only be incremented when the device has not gone into cold restart
+  // disconnection counter will be incremented during current restart session only via BLYNK_DISCONNECTED and BLYNK_CONNECTED
+  write16bitIntoEEPROM(disconnCounterAddress,disconnection_count);
 }
 
 BLYNK_ELAPSE_OUT(char state, int val){
@@ -1076,6 +1176,11 @@ BLYNK_WRITE(V26){
 BLYNK_WRITE(V27){
   int pinValue = param.asInt();
   if(pinValue) clear_disconnCounter();
+}
+
+BLYNK_WRITE(V28){
+  int pinValue = param.asInt();
+  if(pinValue) clear_wifiRetryCounter();
 }
 
 

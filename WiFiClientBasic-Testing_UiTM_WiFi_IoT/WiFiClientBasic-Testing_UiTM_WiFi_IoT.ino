@@ -4,6 +4,7 @@
 #include <Arduino_JSON.h>
 #include "uptime_formatter.h"
 #include "uptime.h"
+#include <WiFiClientSecure.h>
 
 // #define ESP32S2 // comment this line if uploading to ESP32C3
 #define LCD_DISABLED // uncomment this for ESP32C3
@@ -69,11 +70,47 @@
     0b00011,
   };
 
+const char* ca_cert = \
+"-----BEGIN CERTIFICATE-----\n" \
+"MIIFNDCCBNugAwIBAgIQBNn/61aAiBJfiezi1D3EqzAKBggqhkjOPQQDAjBKMQsw\n" \
+"CQYDVQQGEwJVUzEZMBcGA1UEChMQQ2xvdWRmbGFyZSwgSW5jLjEgMB4GA1UEAxMX\n" \
+"Q2xvdWRmbGFyZSBJbmMgRUNDIENBLTMwHhcNMjIwNTExMDAwMDAwWhcNMjMwNTEw\n" \
+"MjM1OTU5WjB1MQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQG\n" \
+"A1UEBxMNU2FuIEZyYW5jaXNjbzEZMBcGA1UEChMQQ2xvdWRmbGFyZSwgSW5jLjEe\n" \
+"MBwGA1UEAxMVc25pLmNsb3VkZmxhcmVzc2wuY29tMFkwEwYHKoZIzj0CAQYIKoZI\n" \
+"zj0DAQcDQgAE8IMERGcUe5+tcpaPvSatP0spInqjqn9ad7L87jMk+KSI0rYz+rrM\n" \
+"wUdeLYN1Bsvw1rKHcMrKhZfKZKN96DhzXaOCA3YwggNyMB8GA1UdIwQYMBaAFKXO\n" \
+"N+rrsHUOlGeItEX62SQQh5YfMB0GA1UdDgQWBBRQYqmZxXhHEHWGsv4FZN38jL1A\n" \
+"2jA+BgNVHREENzA1ghVzbmkuY2xvdWRmbGFyZXNzbC5jb22CDiouZ2VvYXBpZnku\n" \
+"Y29tggxnZW9hcGlmeS5jb20wDgYDVR0PAQH/BAQDAgeAMB0GA1UdJQQWMBQGCCsG\n" \
+"AQUFBwMBBggrBgEFBQcDAjB7BgNVHR8EdDByMDegNaAzhjFodHRwOi8vY3JsMy5k\n" \
+"aWdpY2VydC5jb20vQ2xvdWRmbGFyZUluY0VDQ0NBLTMuY3JsMDegNaAzhjFodHRw\n" \
+"Oi8vY3JsNC5kaWdpY2VydC5jb20vQ2xvdWRmbGFyZUluY0VDQ0NBLTMuY3JsMD4G\n" \
+"A1UdIAQ3MDUwMwYGZ4EMAQICMCkwJwYIKwYBBQUHAgEWG2h0dHA6Ly93d3cuZGln\n" \
+"aWNlcnQuY29tL0NQUzB2BggrBgEFBQcBAQRqMGgwJAYIKwYBBQUHMAGGGGh0dHA6\n" \
+"Ly9vY3NwLmRpZ2ljZXJ0LmNvbTBABggrBgEFBQcwAoY0aHR0cDovL2NhY2VydHMu\n" \
+"ZGlnaWNlcnQuY29tL0Nsb3VkZmxhcmVJbmNFQ0NDQS0zLmNydDAMBgNVHRMBAf8E\n" \
+"AjAAMIIBfAYKKwYBBAHWeQIEAgSCAWwEggFoAWYAdgDoPtDaPvUGNTLnVyi8iWvJ\n" \
+"A9PL0RFr7Otp4Xd9bQa9bgAAAYCxtrYaAAAEAwBHMEUCIQD1/3wfzNfE4EaDFKYc\n" \
+"j21kBNt+5y6s9SZJLInD9h7mvAIgEOgai3WtDk+kzgAA0+5D1GmDw9fKVMRmOTk+\n" \
+"niKnuK8AdQA1zxkbv7FsV78PrUxtQsu7ticgJlHqP+Eq76gDwzvWTAAAAYCxtrZR\n" \
+"AAAEAwBGMEQCIBhaXWb+CTgAqbGsMVXWbWaxy4rsXbnY+PXpdCaup0yHAiA7TuJl\n" \
+"pSXCa0SbG6iBAd/KzW/gdrgDUt1Gw8kvXyNGWwB1ALc++yTfnE26dfI5xbpY9Gxd\n" \
+"/ELPep81xJ4dCYEl7bSZAAABgLG2tjwAAAQDAEYwRAIgVYZLggdL3rlxJ94yK5bd\n" \
+"suDu3GBXv2UNf+9ndfq8QX4CIEemUgGZmFt42f7CjU7DNSidT8RPowzRYY2PK/jA\n" \
+"mCc0MAoGCCqGSM49BAMCA0cAMEQCID3g3Zahwe8HIbyEGCRjz/fR8vIp7+svso3N\n" \
+"QltwkIqeAiA4kg9eacmaF5hCfPmIbhFT+sUfty8Yv+vxqUsI29Ga8w==\n" \
+"-----END CERTIFICATE-----\n";
+
+
 void on_onboard_led();
 void off_onboard_led();
 
-const char* ssid = "UiTM WiFi IoT"; // "Maxis Postpaid 128 5G";
-const char* pass = "";
+// const char* ssid = "UiTM WiFi IoT"; // "Maxis Postpaid 128 5G";
+// const char* pass = "";
+
+char ssid[] = "Maxis_128_5G";
+char pass[] = "respironics"; // leave this empty as this is an open network
 
 // const char* ssid = "Robotronix"; // "Maxis Postpaid 128 5G";
 // const char* pass = "robotroxian";
@@ -84,7 +121,14 @@ String openWeatherMapApiKey = "dbd7235bcc77e5896c73e975d013debe";
 String city = "Kuching";
 String countryCode = "MY";
 unsigned long lastTime = 0;
-unsigned long interval = 2000;
+unsigned long interval = 5000;
+// https://api.geoapify.com/v1/geocode/reverse?lat=51.21709661403662&lon=6.7782883744862374&apiKey=aad49482771c41c8bd927acac874e28a
+// curl --location--request GET 'https://api.geoapify.com/v1/geocode/reverse?lat=51.21709661403662&lon=6.7782883744862374&apiKey=aad49482771c41c8bd927acac874e28a'
+
+String jsonBufferGeo= "None";
+
+String jsonAddress  = "None";
+String jsonAddress1  = "None";
 
 String jsonBuffer   = "None";
 String jsonString   = "None";
@@ -96,6 +140,18 @@ float tempC ;
 float humid ; 
 String mac_str = "None";
 String esp_model = "None";
+
+
+// const char* server = "https://api.geoapify.com/v1/geocode/reverse?lat=1.4471437206974116&lon=110.45102315640258&apiKey=aad49482771c41c8bd927acac874e28a";
+
+WiFiClientSecure client_https;
+
+const char*  server = "api.geoapify.com";  // Server URL
+// const char*  server = "maps.googleapis.com";  // Server URL
+
+const int httpPort = 443;
+String urlPiece = "/v1/geocode/reverse?lat=1.4471437206974116&lon=110.45102315640258";
+String urlKey = "&apiKey=aad49482771c41c8bd927acac874e28a";
 
 void setup(){
     #ifdef DEBUG_SERIAL
@@ -218,6 +274,19 @@ void setup(){
       loopRGB();
     #endif
 
+    client_https.setInsecure(); // dedicated for Google Maps API or GeoApify | 20 Feb 2023 Success
+    // client_https.setCACert(ca_cert);       
+
+    int  conn;
+    int chip_id = ESP.getEfuseMac();;
+    Serial.printf("  Flash Chip id = %08X\t", chip_id);
+    Serial.println();
+    String body = "ChipId=" + String(chip_id) + "&SentBy=" + "your_name";
+    int body_len = body.length();
+    Serial.println(".....");  
+    request_http();
+    request_https();
+
 }
 
 /*
@@ -226,141 +295,324 @@ http://api.openweathermap.org/data/2.5/weather?q=Kuching,MY&APPID=dbd7235bcc77e5
 dbd7235bcc77e5896c73e975d013debe
 */
 
-void loop()
-{
-    Serial.printf("%s Found!\n",esp_model);
-    Serial.println(mac_str);
-    #ifndef LCD_DISABLED
-    lcd.clear();
-    lcd.setCursor(0,0);
-    lcd.print(esp_model);
-    lcd.setCursor(0,1);
-    lcd.print(mac_str);
+void loop() {
+  // do nothing
+}
+
+void request_http(){
+  Serial.print("\nSending HTTP Request.\n");
+
+  String serverPath = "http://api.openweathermap.org/data/2.5/weather?q=" + city + "," + countryCode + "&APPID=" + openWeatherMapApiKey;
+  jsonBuffer = httpGETRequest(serverPath.c_str());
+  Serial.printf("[OpenWeather] HTTP payload out is \n");
+  Serial.println(jsonBuffer);
+  Serial.printf("[End of payload]\n");
+  JSONVar myObject = JSON.parse(jsonBuffer);
+  if (JSON.typeof(myObject) == "undefined") {
+    #ifdef DEBUG_SERIAL
+    Serial.println("[Open Weather Map] Parsing input failed!");
+    #endif
+    return;
+  }
+  Serial.println("[Open Weather Map] Parsing input successful!");
+  Serial.print("myObject object before calling stringify:");  Serial.println(myObject);
+  jsonWeather = JSON.stringify(myObject["weather"][0]["description"]);
+  Serial.print("myObject object after calling stringify:");  Serial.println(myObject);
+  Serial.print("Weather:");  Serial.println(jsonWeather);
+
+}
+
+void request_https(){
+  String url = urlPiece + urlKey;
+  String serverGeoapify = "https://" + url;
+
+  while (!client_https.connect(server, httpPort)) {
+    Serial.printf("[ERROR]: Connection to %s failed!\n", server);
+    Serial.println("Waiting 2000 ms");
+    Serial.print("Retrying connecting");
+    for(int i=0; i<20; i++){
+      Serial.print(".");
+      delay(100);
+    }
+  }
+  
+  Serial.printf("[SUCCESS]: Connected to GeoAPI  server: %s \n",server);
+  
+  Serial.print("\nSending HTTPS Request.\n");
+  Serial.println(String("https://") + server + url + "\n");
+
+  // client_https.println("GET "+url+" HTTP/1.1");
+  // client_https.println("Host: api.geoapify.com");
+  // client_https.println("Connection: close");
+  // client_https.println();
+
+  // while (client_https.connected()) {
+  //   String line = client_https.readStringUntil('\n');
+  //   if (line == "\r") {
+  //     Serial.println("[SUCCESS] Headers received successfully"); //  skip response header / end of header found
+  //     Serial.println("Printing output");
+  //     Serial.println(line);
+  //     break;
+  //   }else{
+  //     Serial.print("-"); // [WARNING] Headers not received!
+  //   }
+  // }
+
+  // String out = "{}";
+  // while (client_https.available()) {
+  //   // char c = client_https.read();
+  //   // Serial.write(c);
+  //   out = client_https.readString();
+  // }
+  // int length_str = out.length();
+  // out.remove(0,3);
+  // out.remove((length_str-1),1);
+
+  String jsonBufferGeo = httpsGETRequest(serverGeoapify.c_str());
+
+  Serial.printf("HTTPS payload out is \n");
+  Serial.println(jsonBufferGeo);
+  Serial.printf("[End of payload]\n");
+
+  JSONVar rev_geo = JSON.parse(jsonBufferGeo);
+
+  if (JSON.typeof(rev_geo) == "undefined") {
+    #ifdef DEBUG_SERIAL
+    Serial.println("[Reverse Geocode] Parsing input failed!");
     delay(1000);
     #endif
-
-  int RSSI_dBm =  WiFi.RSSI();
-  String rssi_state = get_rssi_state(RSSI_dBm);
-  #ifndef LCD_DISABLED
-  display_uptime_top_row();
-  #endif    
-    // Send an HTTP GET request
-  if ((millis() - lastTime) > interval) {
-    // Check WiFi connection status
-    if(WiFi.status()== WL_CONNECTED){ 
-      on_grn();    
-      on_onboard_led();
-      #ifdef ESP32S2
-      greenOn();
-      #endif
-      String serverPath = "http://api.openweathermap.org/data/2.5/weather?q=" + city + "," + countryCode + "&APPID=" + openWeatherMapApiKey;
-      
-      jsonBuffer = httpGETRequest(serverPath.c_str());
-      #ifdef DEBUG_SERIAL
-      // Serial.println(jsonBuffer); // print all JSON output
-      #endif
-      JSONVar myObject = JSON.parse(jsonBuffer);
-  
-      // JSON.typeof(jsonVar) can be used to get the type of the var
-      if (JSON.typeof(myObject) == "undefined") {
-        #ifdef DEBUG_SERIAL
-        Serial.println("Parsing input failed!");
-        #endif
-        return;
-      }
-
-      // 0K − 273.15
-
-      jsonString = JSON.stringify(myObject["main"]["temp"]);
-      jsonHumid = JSON.stringify(myObject["main"]["humidity"]);
-
-      tempK = jsonString.toFloat(); 
-      tempC = tempK - 273.15;
-      humid = jsonHumid.toFloat(); 
-
-      jsonWeather = JSON.stringify(myObject["weather"][0]["description"]);
-      // String jsonWeather = "thunderstorm with light rain";
-  
-      #ifdef DEBUG_SERIAL
-      Serial.print("JSON object = ");
-      Serial.println(myObject);
-      Serial.print("Temperature: ");
-      Serial.println(tempC);
-      Serial.print("Pressure: ");
-      Serial.println(myObject["main"]["pressure"]);
-      Serial.print("Humidity: ");
-      Serial.println(myObject["main"]["humidity"]);
-      Serial.print("Wind Speed: ");
-      Serial.println(myObject["wind"]["speed"]);
-      Serial.print("Weather: ");
-      Serial.println(myObject["weather"][0]["description"]);
-      Serial.print("Feels like: ");
-      Serial.println(myObject["main"]["feels_like"]);
-      #endif
-    }
-    else {
-      #ifdef DEBUG_SERIAL
-      Serial.println("WiFi Disconnected");
-      #endif
-
-      #ifndef LCD_DISABLED
-      lcd.clear();
-      lcd.setCursor(0,0); // row 0, column 0
-      lcd.print("WiFi Disconnect"); // print connected SSID
-      lcd.setCursor(0,1); // row 0, column 0
-      lcd.print("Restart ESP Now"); // print connected SSID
-      #endif
-      on_blu();
-      #ifdef ESP32S2
-      blueOn();
-      #endif
-      delay(1000);
-      ESP.restart();
-    }
-    lastTime = millis();
+    return;
   }
-  // taken out from if(WiFi.status()== WL_CONNECTED) logic 20 Jan 2023
-  // solving the weird frozen issue when i2c LCD attached 
+  Serial.println("[Reverse Geocode] Parsing input successful!");
+  Serial.print("rev_geo object before calling stringify:"); Serial.println(rev_geo);
 
-  #ifndef LCD_DISABLED
-  if(millis() % 2 == 0){
-        lcd.setCursor(0,1);
-        lcd.print(jsonWeather);
-        // int str_length = jsonWeather.length();
-        // if(str_length > 16){
-        //   for (int positionCounter = 0; positionCounter < 13; positionCounter++) {
-        //     // scroll one position left:
-        //     lcd.scrollDisplayLeft();
-        //     // wait a bit:
-        //     delay(150);
-        //   }
-        // }
-      }
-      else if(millis() % 5 == 0){
-        lcd.clear();
-        lcd.setCursor(0,0);
-        lcd.print(esp_model);
-        lcd.setCursor(0,1); // row 0, column 0
-        lcd.print(mac_str); // print connected SSID
-      }
-      else if(millis() % 11 == 0){
+  jsonAddress1 = JSON.stringify(rev_geo['features'][0]['properties']['address_line1']);
+  Serial.print("Address 1:");  Serial.println(jsonAddress1);
 
-      }
-      else{
-        lcd.clear();
-        lcd.print(rssi_state);
-        lcd.setCursor(0,1);
-        lcd.print(String(tempC) + " " + String(humid)+"%");        
-      }
-  #endif
-  off_rgb();
-  #ifdef ESP32S2
-  rgbOff();
-  #endif
-  off_onboard_led();
-  delay(1000);
+  Serial.print("rev_geo object after calling stringify:");  Serial.println(rev_geo);
 
-} // end of void loop
+}
+
+/*
+import requests
+import json
+from requests.structures import CaseInsensitiveDict
+
+lat1 = 1.4471437206974116
+lon1 = 110.45102315640258
+
+lat2 = 1.4560609713111177
+lon2 = 110.42437033120086
+
+
+def get_address(lat,lon):
+    url = "https://api.geoapify.com/v1/geocode/reverse?lat="+str(lat)+"&lon="+str(lon)+"&apiKey=aad49482771c41c8bd927acac874e28a"
+
+    headers = CaseInsensitiveDict()
+    headers["Accept"] = "application/json"
+    resp = requests.get(url, headers=headers)
+    # print(resp.status_code)
+    data = json.loads(resp.text)
+    # print(resp.json().items())
+    print("Name:"       , data['features'][0]['properties']['name'])
+    print("Country:"    , data['features'][0]['properties']['country'])
+    print("Formatted:"  , data['features'][0]['properties']['formatted'])
+    print("Address 1:"  , data['features'][0]['properties']['address_line1'])
+    print("Address 2:"  , data['features'][0]['properties']['address_line2'])
+
+get_address(lat1,lon1)
+get_address(lat2,lon2)
+*/
+
+// void loop()
+// {
+//     Serial.printf("%s Found!\n",esp_model);
+//     Serial.println(mac_str);
+//     #ifndef LCD_DISABLED
+//     lcd.clear();
+//     lcd.setCursor(0,0);
+//     lcd.print(esp_model);
+//     lcd.setCursor(0,1);
+//     lcd.print(mac_str);
+//     delay(1000);
+//     #endif
+
+//   int RSSI_dBm =  WiFi.RSSI();
+//   String rssi_state = get_rssi_state(RSSI_dBm);
+//   #ifndef LCD_DISABLED
+//   display_uptime_top_row();
+//   #endif    
+//     // Send an HTTP GET request
+//   if ((millis() - lastTime) > interval) {
+//     // Check WiFi connection status
+//     if(WiFi.status()== WL_CONNECTED){ 
+
+//       on_grn();    
+//       on_onboard_led();
+//       #ifdef ESP32S2
+//       greenOn();
+//       #endif
+//       String serverPath = "http://api.openweathermap.org/data/2.5/weather?q=" + city + "," + countryCode + "&APPID=" + openWeatherMapApiKey;
+//       String serverGeoapify = "https://api.geoapify.com/v1/geocode/reverse?lat=51.21709661403662&lon=6.7782883744862374&apiKey=aad49482771c41c8bd927acac874e28a";
+//       // https://api.geoapify.com/v1/geocode/reverse?lat=1.4471437206974116&lon=110.45102315640258&apiKey=aad49482771c41c8bd927acac874e28a
+//     client_https.connect(serverGeoapify.c_str(),443);
+//     client_https.println("GET " + serverGeoapify +"/ HTTP/1.0");
+
+
+//       // jsonBufferGeo = httpGETRequest(serverGeoapify.c_str());
+      
+//       jsonBuffer = httpGETRequest(serverPath.c_str());
+//       #ifdef DEBUG_SERIAL
+//       // Serial.println(jsonBuffer); // print all JSON output
+//       Serial.println(jsonBufferGeo); // print all JSON output
+
+//       #endif
+//       JSONVar myObject = JSON.parse(jsonBuffer);
+//       // JSONVar rev_geo = JSON.parse(jsonBufferGeo);
+
+//       // if (JSON.typeof(rev_geo) == "undefined") {
+//       //   #ifdef DEBUG_SERIAL
+//       //   Serial.println("[Reverse Geocode] Parsing input failed!");
+//       //   delay(1000);
+//       //   #endif
+//       //   return;
+//       // }
+
+  
+//       // JSON.typeof(jsonVar) can be used to get the type of the var
+//       if (JSON.typeof(myObject) == "undefined") {
+//         #ifdef DEBUG_SERIAL
+//         Serial.println("[Open Weather Map] Parsing input failed!");
+//         #endif
+//         return;
+//       }
+
+//       // 0K − 273.15
+
+//       jsonString = JSON.stringify(myObject["main"]["temp"]);
+//       jsonHumid = JSON.stringify(myObject["main"]["humidity"]);
+
+//       tempK = jsonString.toFloat(); 
+//       tempC = tempK - 273.15;
+//       humid = jsonHumid.toFloat(); 
+
+//       jsonWeather = JSON.stringify(myObject["weather"][0]["description"]);
+//       // String jsonWeather = "thunderstorm with light rain";
+  
+//       #ifdef DEBUG_SERIAL
+//       Serial.print("JSON object = ");
+//       Serial.println(myObject);
+
+//       // Serial.print("Reverse Geo object = ");
+//       // Serial.println(rev_geo);
+//       // Serial.print("Temperature: ");
+//       // Serial.println(tempC);
+//       // Serial.print("Pressure: ");
+//       // Serial.println(myObject["main"]["pressure"]);
+//       // Serial.print("Humidity: ");
+//       // Serial.println(myObject["main"]["humidity"]);
+//       // Serial.print("Wind Speed: ");
+//       // Serial.println(myObject["wind"]["speed"]);
+//       // Serial.print("Weather: ");
+//       // Serial.println(myObject["weather"][0]["description"]);
+//       // Serial.print("Feels like: ");
+//       // Serial.println(myObject["main"]["feels_like"]);
+//       #endif
+//     }
+//     else {
+//       #ifdef DEBUG_SERIAL
+//       Serial.println("WiFi Disconnected");
+//       #endif
+
+//       #ifndef LCD_DISABLED
+//       lcd.clear();
+//       lcd.setCursor(0,0); // row 0, column 0
+//       lcd.print("WiFi Disconnect"); // print connected SSID
+//       lcd.setCursor(0,1); // row 0, column 0
+//       lcd.print("Restart ESP Now"); // print connected SSID
+//       #endif
+//       on_blu();
+//       #ifdef ESP32S2
+//       blueOn();
+//       #endif
+//       delay(1000);
+//       ESP.restart();
+//     }
+//     lastTime = millis();
+//   }
+//   // taken out from if(WiFi.status()== WL_CONNECTED) logic 20 Jan 2023
+//   // solving the weird frozen issue when i2c LCD attached 
+
+//   #ifndef LCD_DISABLED
+//   if(millis() % 2 == 0){
+//         lcd.setCursor(0,1);
+//         lcd.print(jsonWeather);
+//         // int str_length = jsonWeather.length();
+//         // if(str_length > 16){
+//         //   for (int positionCounter = 0; positionCounter < 13; positionCounter++) {
+//         //     // scroll one position left:
+//         //     lcd.scrollDisplayLeft();
+//         //     // wait a bit:
+//         //     delay(150);
+//         //   }
+//         // }
+//       }
+//       else if(millis() % 5 == 0){
+//         lcd.clear();
+//         lcd.setCursor(0,0);
+//         lcd.print(esp_model);
+//         lcd.setCursor(0,1); // row 0, column 0
+//         lcd.print(mac_str); // print connected SSID
+//       }
+//       else if(millis() % 11 == 0){
+
+//       }
+//       else{
+//         lcd.clear();
+//         lcd.print(rssi_state);
+//         lcd.setCursor(0,1);
+//         lcd.print(String(tempC) + " " + String(humid)+"%");        
+//       }
+//   #endif
+//   off_rgb();
+//   #ifdef ESP32S2
+//   rgbOff();
+//   #endif
+//   off_onboard_led();
+//   delay(1000);
+
+// } // end of void loop
+
+String httpsGETRequest(const char* serverName) {
+  HTTPClient https;
+    
+  // Your Domain name with URL path or IP address with path
+  https.begin(client_https, serverName);
+  
+  // Send HTTP POST request
+  int httpResponseCode = https.GET();
+  
+  String payload = "{}"; 
+  
+  if (httpResponseCode>0) {
+    #ifdef DEBUG_SERIAL
+    Serial.print("HTTP Response code: ");
+    Serial.println(httpResponseCode);
+    #endif
+    payload = https.getString();
+  }
+  else {
+    #ifdef DEBUG_SERIAL
+    Serial.print("HTTPS GET Error code: ");
+    Serial.println(httpResponseCode);
+    #endif
+
+  }
+  // Free resources
+  https.end();
+
+  return payload;
+}
 
 String httpGETRequest(const char* serverName) {
   WiFiClient client;
@@ -383,7 +635,7 @@ String httpGETRequest(const char* serverName) {
   }
   else {
     #ifdef DEBUG_SERIAL
-    Serial.print("Error code: ");
+    Serial.print("HTTP GET Error code: ");
     Serial.println(httpResponseCode);
     #endif
 
