@@ -284,8 +284,8 @@ void setup(){
     String body = "ChipId=" + String(chip_id) + "&SentBy=" + "your_name";
     int body_len = body.length();
     Serial.println(".....");  
-    request_http();
-    request_https();
+    // http_request();
+    https_request();
 
 }
 
@@ -299,11 +299,11 @@ void loop() {
   // do nothing
 }
 
-void request_http(){
+void http_request(){
   Serial.print("\nSending HTTP Request.\n");
 
   String serverPath = "http://api.openweathermap.org/data/2.5/weather?q=" + city + "," + countryCode + "&APPID=" + openWeatherMapApiKey;
-  jsonBuffer = httpGETRequest(serverPath.c_str());
+  jsonBuffer = http_GET_request(serverPath.c_str());
   Serial.printf("[OpenWeather] HTTP payload out is \n");
   Serial.println(jsonBuffer);
   Serial.printf("[End of payload]\n");
@@ -322,9 +322,9 @@ void request_http(){
 
 }
 
-void request_https(){
+void https_request(){
   String url = urlPiece + urlKey;
-  String serverGeoapify = "https://" + url;
+  String serverGeoapify = "https://" + String(server) + url;
 
   while (!client_https.connect(server, httpPort)) {
     Serial.printf("[ERROR]: Connection to %s failed!\n", server);
@@ -340,35 +340,7 @@ void request_https(){
   
   Serial.print("\nSending HTTPS Request.\n");
   Serial.println(String("https://") + server + url + "\n");
-
-  // client_https.println("GET "+url+" HTTP/1.1");
-  // client_https.println("Host: api.geoapify.com");
-  // client_https.println("Connection: close");
-  // client_https.println();
-
-  // while (client_https.connected()) {
-  //   String line = client_https.readStringUntil('\n');
-  //   if (line == "\r") {
-  //     Serial.println("[SUCCESS] Headers received successfully"); //  skip response header / end of header found
-  //     Serial.println("Printing output");
-  //     Serial.println(line);
-  //     break;
-  //   }else{
-  //     Serial.print("-"); // [WARNING] Headers not received!
-  //   }
-  // }
-
-  // String out = "{}";
-  // while (client_https.available()) {
-  //   // char c = client_https.read();
-  //   // Serial.write(c);
-  //   out = client_https.readString();
-  // }
-  // int length_str = out.length();
-  // out.remove(0,3);
-  // out.remove((length_str-1),1);
-
-  String jsonBufferGeo = httpsGETRequest(serverGeoapify.c_str());
+  String jsonBufferGeo = https_GET_request(serverGeoapify.c_str());
 
   Serial.printf("HTTPS payload out is \n");
   Serial.println(jsonBufferGeo);
@@ -384,45 +356,12 @@ void request_https(){
     return;
   }
   Serial.println("[Reverse Geocode] Parsing input successful!");
-  Serial.print("rev_geo object before calling stringify:"); Serial.println(rev_geo);
 
-  jsonAddress1 = JSON.stringify(rev_geo['features'][0]['properties']['address_line1']);
+  jsonAddress1 = JSON.stringify(rev_geo["features"][0]["properties"]["address_line1"]);
   Serial.print("Address 1:");  Serial.println(jsonAddress1);
 
-  Serial.print("rev_geo object after calling stringify:");  Serial.println(rev_geo);
 
 }
-
-/*
-import requests
-import json
-from requests.structures import CaseInsensitiveDict
-
-lat1 = 1.4471437206974116
-lon1 = 110.45102315640258
-
-lat2 = 1.4560609713111177
-lon2 = 110.42437033120086
-
-
-def get_address(lat,lon):
-    url = "https://api.geoapify.com/v1/geocode/reverse?lat="+str(lat)+"&lon="+str(lon)+"&apiKey=aad49482771c41c8bd927acac874e28a"
-
-    headers = CaseInsensitiveDict()
-    headers["Accept"] = "application/json"
-    resp = requests.get(url, headers=headers)
-    # print(resp.status_code)
-    data = json.loads(resp.text)
-    # print(resp.json().items())
-    print("Name:"       , data['features'][0]['properties']['name'])
-    print("Country:"    , data['features'][0]['properties']['country'])
-    print("Formatted:"  , data['features'][0]['properties']['formatted'])
-    print("Address 1:"  , data['features'][0]['properties']['address_line1'])
-    print("Address 2:"  , data['features'][0]['properties']['address_line2'])
-
-get_address(lat1,lon1)
-get_address(lat2,lon2)
-*/
 
 // void loop()
 // {
@@ -459,9 +398,9 @@ get_address(lat2,lon2)
 //     client_https.println("GET " + serverGeoapify +"/ HTTP/1.0");
 
 
-//       // jsonBufferGeo = httpGETRequest(serverGeoapify.c_str());
+//       // jsonBufferGeo = http_GET_request(serverGeoapify.c_str());
       
-//       jsonBuffer = httpGETRequest(serverPath.c_str());
+//       jsonBuffer = http_GET_request(serverPath.c_str());
 //       #ifdef DEBUG_SERIAL
 //       // Serial.println(jsonBuffer); // print all JSON output
 //       Serial.println(jsonBufferGeo); // print all JSON output
@@ -583,28 +522,28 @@ get_address(lat2,lon2)
 
 // } // end of void loop
 
-String httpsGETRequest(const char* serverName) {
+String https_GET_request(const char* serverName) {
   HTTPClient https;
     
   // Your Domain name with URL path or IP address with path
   https.begin(client_https, serverName);
   
   // Send HTTP POST request
-  int httpResponseCode = https.GET();
+  int responseCode = https.GET();
   
   String payload = "{}"; 
   
-  if (httpResponseCode>0) {
+  if (responseCode>0) {
     #ifdef DEBUG_SERIAL
     Serial.print("HTTP Response code: ");
-    Serial.println(httpResponseCode);
+    Serial.println(responseCode);
     #endif
     payload = https.getString();
   }
   else {
     #ifdef DEBUG_SERIAL
     Serial.print("HTTPS GET Error code: ");
-    Serial.println(httpResponseCode);
+    Serial.println(responseCode);
     #endif
 
   }
@@ -614,7 +553,7 @@ String httpsGETRequest(const char* serverName) {
   return payload;
 }
 
-String httpGETRequest(const char* serverName) {
+String http_GET_request(const char* serverName) {
   WiFiClient client;
   HTTPClient http;
     
@@ -622,21 +561,21 @@ String httpGETRequest(const char* serverName) {
   http.begin(client, serverName);
   
   // Send HTTP POST request
-  int httpResponseCode = http.GET();
+  int responseCode = http.GET();
   
   String payload = "{}"; 
   
-  if (httpResponseCode>0) {
+  if (responseCode>0) {
     #ifdef DEBUG_SERIAL
     Serial.print("HTTP Response code: ");
-    Serial.println(httpResponseCode);
+    Serial.println(responseCode);
     #endif
     payload = http.getString();
   }
   else {
     #ifdef DEBUG_SERIAL
     Serial.print("HTTP GET Error code: ");
-    Serial.println(httpResponseCode);
+    Serial.println(responseCode);
     #endif
 
   }
@@ -853,3 +792,34 @@ void try_wifi_connect(){
     
 }
 #endif
+
+
+/*
+  client_https.println("GET "+url+" HTTP/1.1");
+  client_https.println("Host: api.geoapify.com");
+  client_https.println("Connection: close");
+  client_https.println();
+
+  while (client_https.connected()) {
+    String line = client_https.readStringUntil('\n');
+    if (line == "\r") {
+      Serial.println("[SUCCESS] Headers received successfully"); //  skip response header / end of header found
+      Serial.println("Printing output");
+      Serial.println(line);
+      break;
+    }else{
+      Serial.print("-"); // [WARNING] Headers not received!
+    }
+  }
+
+  String out = "{}";
+  while (client_https.available()) {
+    // char c = client_https.read();
+    // Serial.write(c);
+    out = client_https.readString();
+  }
+  int length_str = out.length();
+  out.remove(0,3);
+  out.remove((length_str-1),1);
+
+*/

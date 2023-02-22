@@ -22,7 +22,9 @@ Adafruit_NeoPixel   strip_ring(RING_COUNT, RING_PIN, NEO_GRB + NEO_KHZ800);
 #define DELAY_MICROSEC  500
 #define DELAY_100MS     100
 
-#define AUTO_CONTROL
+
+#define DUMMY_BMI
+// #define AUTO_CONTROL
 // #define AUTO_DUMMY //  used for product features showcase
 // #define ENCODER_CONTROL
 // #define AUTO_LOOP
@@ -142,7 +144,7 @@ void writeIntIntoEEPROM(int address, int number)
 }
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
   pinMode(MODE_SELECT, INPUT_PULLUP);
   pinMode(BUZZER, OUTPUT);
   pinMode(stepPin,OUTPUT); 
@@ -286,7 +288,120 @@ void setup() {
  } // end of void setup()
 
 
+ void dummy_bmi(int height_cm , float weight){
+
+   /*
+      If your BMI is less than 18.5, it falls within the underweight range.
+      If your BMI is 18.5 to 24.9, it falls within the Healthy Weight range.
+      If your BMI is 25.0 to 29.9, it falls within the overweight range.
+      If your BMI is 30.0 or higher, it falls within the obese range.
+   
+   */
+
+    // float weight = 82.05; // frans weight as reference
+    // int height_cm = 151 ; // 200-50=150 frans height as reference
+
+    float h_m = height_cm / 100.0;
+    int w_x100 =  weight * 100;
+    float bmi = (weight / (h_m * h_m));
+    int bmi_x100 = bmi * 100;
+
+    if(height_cm < 140) height_cm = 140;
+    if(height_cm > 200) height_cm = 200;
+
+    byte height[4];
+    for (int i = 3 ; i >= 0 ; i--)
+    {
+      height[i] = height_cm % 10 ;
+      height_cm /= 10 ;
+    }
+    byte tall[4] = {_t, _a, _l, _l};
+    disp.point(0);   
+    disp.scrollByte(tall, 50);
+    delay(DELAY_MICROSEC);
+
+    disp.point(1);    
+    disp.clear();
+    disp.twistByte(height, 1);     
+    disp.scroll(height, 100);     
+    delay(1000);
+
+    byte weight_arr[4];
+    for (int i = 3 ; i >= 0 ; i--)
+    {
+      weight_arr[i] = w_x100 % 10 ;
+      w_x100 /= 10 ;
+    }
+    byte load[4] = {_l, _o, _a, _d};
+    disp.point(0);   
+    disp.scrollByte(load, 50);
+    delay(DELAY_MICROSEC);
+    disp.point(1);    
+    disp.clear();
+    disp.twistByte(weight_arr, 1);     
+    disp.scroll(weight_arr, 100);     
+    delay(1000);
+
+
+    byte bmi_arr[4];
+    for (int i = 3 ; i >= 0 ; i--)
+    {
+      bmi_arr[i] = bmi_x100 % 10 ;
+      bmi_x100 /= 10 ;
+    }
+
+
+    byte bnni[4] = {_b, _n, _n, _i};
+    disp.point(0);   
+    disp.scrollByte(bnni, 50);
+    delay(DELAY_MICROSEC);
+
+    disp.point(1);    
+    disp.clear();
+    disp.twistByte(bmi_arr, 1);     
+    disp.scroll(bmi_arr, 100);     
+    delay(1000);
+
+    clearStrip();
+    if(bmi < 18.5){
+      // underweight
+      colorWipeToBMI(strip.Color(0,0,255), 20, bmi); // blue
+    }else if(bmi >= 18.5 && bmi <= 24.9){
+      // healthy weight
+      colorWipeToBMI(strip.Color(0,255,0), 20, bmi); // green
+    }
+    else if(bmi >= 25 && bmi <= 29.9){
+      // overweight
+      colorWipeToBMI(strip.Color(100,0,0), 20, bmi); // light red
+    }
+    else{
+      // obese
+      colorWipeToBMI(strip.Color(255,0,0), 20, bmi); // bright red
+    }
+    delay(1000);
+ } // end of bmi func
+
+void clearStrip(){
+  colorWipe(strip.Color(0,0,0), 0);
+}
+
  void loop() {
+
+  #ifdef DUMMY_BMI
+  float weight_fran = 82.05;
+  float weight_yazid = 60;
+  float weight_squiter = 65;
+  float weight_evie = 50;
+  rainbow(10);
+  dummy_bmi(170, weight_evie);
+  rainbow(10);
+  dummy_bmi(160, weight_yazid);
+  rainbow(10);
+  dummy_bmi(158, weight_squiter);
+  rainbow(10);
+  dummy_bmi(151, weight_fran);
+
+  #endif
 
   #ifdef TEST_HEIGHT_SENSOR
 
@@ -663,7 +778,7 @@ void setup() {
     }
     delay(1000);
  #endif
- }
+ } // end of void loop
 
 void welcomeScroll() {
   byte welcome_banner[] = {_H, _E, _L, _L, _O, _empty, _C, _P, _S, _empty,       
@@ -773,6 +888,24 @@ void rainbow_ring(int wait) {
     strip_ring.rainbow(firstPixelHue);
     strip_ring.show(); // Update strip with new contents
     delay(wait);  // Pause for a moment
+  }
+}
+
+void colorWipeToBMI(uint32_t color, int wait, float bmi) {
+
+   /*
+      If your BMI is less than 18.5, it falls within the underweight range.
+      If your BMI is 18.5 to 24.9, it falls within the Healthy Weight range.
+      If your BMI is 25.0 to 29.9, it falls within the overweight range.
+      If your BMI is 30.0 or higher, it falls within the obese range.
+   */
+
+  int maxWipe = map(bmi, 18.5, 30.0, 8, strip.numPixels());
+
+  for(int i=0; i<maxWipe; i++) { // For each pixel in strip...
+    strip.setPixelColor(i, color);         //  Set pixel's color (in RAM)
+    strip.show();                          //  Update strip to match
+    delay(wait);                           //  Pause for a moment
   }
 }
 
