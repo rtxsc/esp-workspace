@@ -26,8 +26,8 @@ float lon3 = 110.33950758881247;
 String city = "Kuching";
 String countryCode = "MY";
 
-char ssid[] = "Maxis_128_5G";
-char pass[] = "respironics"; // leave this empty as this is an open network
+char ssid[] = "UiTM WiFi IoT";
+char pass[] = ""; // leave this empty as this is an open network
 
 void setup() {
   // put your setup code here, to run once:

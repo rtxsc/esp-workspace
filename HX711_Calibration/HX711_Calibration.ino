@@ -6,9 +6,14 @@
 // #define LOADCELL_20KG
 
 #ifdef LOADCELL_200KG
-#define ADC_NO_LOAD_200KG 62000 // min 63000 max
-#define ADC_CAL_MIN_200KG 29000
+// #define ADC_NO_LOAD_200KG 62000 // min 63000 max
+// #define ADC_CAL_MIN_200KG 29000
+// #define ADC_CAL_MAX_200KG 30000
+
+#define ADC_NO_LOAD_200KG 47900 // min 63000 max
+#define ADC_CAL_MIN_200KG 19000
 #define ADC_CAL_MAX_200KG 30000
+
 #else
 #define ADC_NO_LOAD_20KG  83000 // min 84000 max
 #define ADC_CAL_MIN_20KG  153000
@@ -22,7 +27,7 @@ GyverTM1637               disp(CLK, DIO);
 // HX711 circuit wiring
 const int LOADCELL_SCK_PIN = 5;
 const int LOADCELL_DOUT_PIN = 6;
-double KNOWN_WEIGHT = 1.46;
+double KNOWN_WEIGHT = 1.46; // 1.46kg = 1.5l bottle
 const byte button = 2;
 double scale_param = 0;
 byte calibrate_count = 0;

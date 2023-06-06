@@ -5,11 +5,14 @@ Edited 28 Dec 2022
 Subscribed to Blynk Plus RM30.90/month on Monday 13 Feb 2023
 Connected and Disconnected logic furnished 15 Feb 2023
 */
-#define ESP32S2_1
+// #define ESP32S2_1
 // #define ESP32S2_2
+// #define ESP32S2_3
 // #define ESP32S2_4
 // #define ESP32S2_5
 // #define ESP32S2_6
+// #define ESP32C3_4
+#define ESP32DEV_0
 
 /* Comment this out to disable prints and save space */
 #define BLYNK_PRINT Serial
@@ -22,6 +25,9 @@ Connected and Disconnected logic furnished 15 Feb 2023
 #elif defined ESP32S2_2
   #define BLYNK_DEVICE_NAME "AASAS M02"
   #define BLYNK_AUTH_TOKEN "AgRl8rHXRFkz4KnUvFWfQtlUCGZ6g8ug"
+#elif defined ESP32S2_3
+  #define BLYNK_DEVICE_NAME "AASAS M03"
+  #define BLYNK_AUTH_TOKEN "vdnuDWozgCa3oP3_xXnekRTLmlo2mjuk"
 #elif defined ESP32S2_4
   #define BLYNK_DEVICE_NAME "AASAS M04"
   #define BLYNK_AUTH_TOKEN "gee5lkJxSCmQrqplsAiH-uVPuNkF-B3G"
@@ -31,6 +37,10 @@ Connected and Disconnected logic furnished 15 Feb 2023
 #elif defined ESP32S2_6
   #define BLYNK_DEVICE_NAME "AASAS M06"
   #define BLYNK_AUTH_TOKEN "qtER7nxNJH1QioLqmH_rE688VdJ5i0L0"
+#elif defined ESP32DEV_0
+  #include "GroveBase-ESPDuino32-Mapping.h"
+  #define BLYNK_DEVICE_NAME "AASAS M07"
+  #define BLYNK_AUTH_TOKEN "K-NDkXmOkZNC3TIKZo6EOrqdQQ8-Mr_f"
 #endif
 
 #include <Wire.h>
@@ -51,13 +61,31 @@ Connected and Disconnected logic furnished 15 Feb 2023
 #include <WiFiUdp.h>
 #include <HTTPClient.h>
 #include <Arduino_JSON.h>
+#include "DS1307.h"
+#include <ChainableLED.h>
+
 
 #define RGB         18 
 #define NUMPIXELS   1 
 #define DELAYVAL    100 
-#define IN1         19
-#define IN2         20
-#define IN3         21
+
+#ifdef ESP32DEV_0
+  #define IN1         GROVE_D2
+  #define IN2         GROVE_D3
+  #define IN3         GROVE_D4
+  #define LED_BLUE    GROVE_D5
+  #define NUM_LEDS              1
+  ChainableLED                  leds(GROVE_A0, GROVE_A1, NUM_LEDS); // (LEAVE A1 EMPTY)
+  byte                          i = 0; // CHAINABLE LED ARRAY
+#else
+  #define IN1         19
+  #define IN2         20
+  #define IN3         21
+  #define LED_BLUE    22  // assumption
+  #define NUM_LEDS              1
+  ChainableLED                  leds(23, 24, NUM_LEDS); // (LEAVE A1 EMPTY)
+  byte                          i = 0; // CHAINABLE LED ARRAY
+#endif
 
 #ifdef ESP32C3
   #define ONBOARD_LED 18
@@ -68,18 +96,40 @@ Connected and Disconnected logic furnished 15 Feb 2023
   #define ONBOARD_LED 2
 #endif
 
+// #include <math.h>
+
+const int B = 4275;               // B value of the thermistor
+const int R0 = 100000;            // R0 = 100k
+#ifdef ESP32DEV_0
+const int pinTempSensor = GROVE_A3;    
+#else
+const int pinTempSensor = 1;     // Grove - Temperature Sensor connect to IO0
+#endif
+
+
 char auth[] = BLYNK_AUTH_TOKEN;
-char ssid[] = "UiTM WiFi IoT";
-char pass[] = ""; // leave this empty as this is an open network
+// char ssid[] = "UiTM WiFi IoT";
+// char pass[] = ""; // leave this empty as this is an open network
 
 // char ssid[] = "Robotronix";
 // char pass[] = "robotroxian"; // leave this empty as this is an open network
 
-// char ssid[] = "Maxis_128_5G";
+char ssid[] = "MaxisONE Fibre 2.4G";
+char pass[] = "respironics"; // leave this empty as this is an open network
+
+// char ssid[] = "Maxis Postpaid 128";
 // char pass[] = "respironics"; // leave this empty as this is an open network
 
-#define I2C_SDA                 41
-#define I2C_SCL                 40
+#ifdef ESP32C3_4
+  #define I2C_SDA                 8 
+  #define I2C_SCL                 9
+#elif defined ESP32DEV_0
+  // use default i2c pinout
+#else
+  #define I2C_SDA                 41 
+  #define I2C_SCL                 40
+#endif
+
 #define wifiConnRetryAddress    0x0C // 12 & 13 : 2 bytes 
 #define restartCounterAddress   0x0F // 15 & 16 : 2 bytes F 10 11
 #define disconnCounterAddress   0x12 // 18 & 19 bytes
@@ -93,6 +143,7 @@ Adafruit_NeoPixel   pixels(NUMPIXELS, RGB);
 Adafruit_INA219     ina219_A;
 rgb_lcd             lcd;
 ADS1115_WE          adc = ADS1115_WE(ADS_I2C_ADDRESS);
+DS1307              _clock;
 
 // Variables to save date and time
 String formattedDate;
@@ -107,7 +158,7 @@ float shuntvoltage;
 float busvoltage;
 float current_mA;
 
-bool GROVE_LCD_AVAILABLE = false;
+bool GROVE_LCD_AVAILABLE = false; // true for debugging purpose 27.02.2023 | change to false 03.03.2023
 bool INA219_AVAILABLE = false;
 bool ADS1115_AVAILABLE = false;
 
@@ -165,6 +216,7 @@ byte degree_symbol[8] = {
 
 BLYNK_CONNECTED();
 BLYNK_DISCONNECTED();
+BLYNK_RESTART();
 
 BLYNK_WRITE(V20);
 BLYNK_WRITE(V21);
@@ -222,8 +274,11 @@ String esp_model = "None";
 void setup()
 {
   Serial.begin(115200);
-
-  Wire.begin(I2C_SDA, I2C_SCL);
+  #ifdef ESP32DEV_0
+    Wire.begin();
+  #else
+    Wire.begin(I2C_SDA, I2C_SCL);
+  #endif
   mac_str = WiFi.macAddress();
   const char* mac_addr = mac_str.c_str();
   Serial.print("MAC (String):");
@@ -250,7 +305,15 @@ void setup()
   mac_str.remove(2,1); // remove the first : from MAC 
 
   Serial.println("\nScanning ESP32s2 i2c port...");
-  i2c_scan();
+  i2c_scan(); // this method discovered to be failed after the latest ESP32 core update 24.02.2023 (Friday)
+  Serial.println("\nReinit i2c port");
+  #ifdef ESP32DEV_0
+    Wire.begin();
+  #else
+    Wire.begin(I2C_SDA, I2C_SCL);
+  #endif  
+  Wire.setClock(125000); // discovered 27.02.2023 at Berlian | this is the key line to solve the weird i2c scanning issue 03.03.2023
+  
   if(INA219_AVAILABLE){
     initINA219();
   }
@@ -295,6 +358,7 @@ void setup()
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
   pinMode(IN3, OUTPUT);
+  pinMode(LED_BLUE, OUTPUT);
 
   #ifdef ESP32C3
     pinMode(R,OUTPUT);
@@ -344,6 +408,26 @@ void setup()
   timeClient.begin();
   timeClient.setTimeOffset(28800);
   restart_ts = get_timestamp(); // must be called after timeClient.begin() for the restart timestamp
+
+  byte setH=0,setM=0,setS=0;
+  short int setYear=2023; 
+  byte setMonth=1, setDay=1;
+
+  setH = timeClient.getHours();
+  setM = timeClient.getMinutes();
+  setS = timeClient.getSeconds();
+
+  formattedDate   = timeClient.getFormattedDate(); 
+  int splitT      = formattedDate.indexOf("T");
+  String date_only = formattedDate.substring(4, splitT);
+  Serial.println(date_only);
+
+
+  _clock.begin();
+  _clock.fillByYMD(setYear,setMonth,setDay);
+  _clock.fillByHMS(setH,setM,setS);
+  _clock.fillDayOfWeek(WED);
+  _clock.setTime(); // write time and date to the RTC chip
 
   Blynk.begin(auth, ssid, pass); // connectWiFi in Blynk is active. meaning connecting twice
 
@@ -458,6 +542,19 @@ void try_wifi_connect(int timeout){
           ESP.restart();
       }
     }
+
+    if(WiFi.status() == WL_CONNECTED){
+      Serial.println("WiFi Connected!");
+      delay(2000);
+      Serial.println("Syncing RTC via NTP now...");
+      delay(2000);
+      timeClient.begin();
+      timeClient.setTimeOffset(28800);
+      timeClient.update();
+      sync_rtc_ntp();
+      Serial.println("Syncing RTC via NTP complete. RTC is now up-to-date!");
+      delay(2000);
+    }
    
     if(GROVE_LCD_AVAILABLE){
       lcd.clear();
@@ -470,13 +567,70 @@ void try_wifi_connect(int timeout){
     }
 }
 
+void get_rtc(){
+  _clock.getTime();
+  String hour = String(_clock.hour, DEC);  
+  String min  = String(_clock.minute, DEC);
+  String sec  = String(_clock.second, DEC);
+
+  byte hourByte = hour.toInt();
+  byte minByte  = min.toInt();
+  byte secByte  = sec.toInt();
+
+  String year = String(_clock.year+2000, DEC);
+  String month = String(_clock.month, DEC);
+  String day = String(_clock.dayOfMonth, DEC);
+
+  int year_int = year.toInt();
+  byte monthByte = month.toInt();
+  byte dayByte = day.toInt();
+  if(year_int < 2023 || year_int > 2050){
+    Serial.println("Error. Date is invalid. Restarting now...");
+    delay(1000);
+    ESP.restart();
+  }
+  Serial.printf("H_byte:%d M_byte:%d S_byte:%d --- ", hourByte, minByte, secByte);
+  Serial.printf("Y_int:%d Mth_byte:%d D_byte:%d\n", year_int, monthByte, dayByte);
+
+}
+
+void sync_rtc_ntp(){
+  String formattedDate;
+  String dayStamp;
+  String timeStamp;
+  String lastSyncRTC;
+
+  byte setH=0,setM=0,setS=0;
+  short int setYear=2023; 
+  byte setMonth=1, setDay=1;
+
+  timeClient.update();
+  setH = timeClient.getHours();
+  setM = timeClient.getMinutes();
+  setS = timeClient.getSeconds();  
+  formattedDate   = timeClient.getFormattedDate(); 
+  int splitT      = formattedDate.indexOf("T");
+  dayStamp        = formattedDate.substring(0, splitT); // default to 4 || 2023-04-17
+  setYear         = formattedDate.substring(0,4).toInt();
+  setMonth        = formattedDate.substring(5,7).toInt();
+  setDay          = formattedDate.substring(8,10).toInt();
+
+  _clock.begin();
+  _clock.fillByYMD(setYear,setMonth,setDay);
+  _clock.fillByHMS(setH,setM,setS);
+  _clock.fillDayOfWeek(setDay);
+  _clock.setTime(); // write time and date to the RTC chip
+  // Serial.printf("H:%d M:%d S:%d\n", setH, setM, setS);
+  // Serial.printf("Year:%d Month:%d Day:%d\n", setYear, setMonth, setDay);
+  
+}
 
 String get_timestamp(){
   timeClient.update();
   // https://github.com/taranais/NTPClient.git
   formattedDate   = timeClient.getFormattedDate(); 
   int splitT      = formattedDate.indexOf("T");
-  dayStamp        = formattedDate.substring(4, splitT);
+  dayStamp        = formattedDate.substring(5, splitT);
   String dateTime = timeClient.getFormattedTime() + " " + dayStamp;
   return dateTime;
 }
@@ -519,9 +673,11 @@ void loopRGB(){
 
 void onRelay1(){
   digitalWrite(IN1,1);
+  digitalWrite(LED_BLUE,1);
 }
 void offRelay1(){
   digitalWrite(IN1,0);
+  digitalWrite(LED_BLUE,0);
 }
 void onRelay2(){
   digitalWrite(IN2,1);
@@ -768,21 +924,17 @@ void getINA219(){
 }
 
 void i2c_scan() {
-  byte error, address;
-  int nDevices;
+  byte error, address, nDevices = 0;
   Serial.println("Scanning...");
-  nDevices = 0;
+  // Wire.setClock(125000); // discovered 27.02.2023 at Berlian | disabled 3.03.2023 Friday MKE2 (issue fixed)
   for(address = 1; address < 127; address++ ) {
-    digitalWrite(2, HIGH);   // turn the LED on (HIGH is the voltage level)
-    digitalWrite(18, HIGH); 
-    delay(15);                       // wait for a second
-    digitalWrite(2, LOW);    // turn the LED off by making the voltage LOW
-    digitalWrite(18, LOW); 
-    delay(15);                       // wait for a second
     Wire.beginTransmission(address);
+    delay(1); // re-enabled 3.03.2023 Friday MKE2 (issue fixed) | kind of fixing the slow scanning issue 03.03.2023
     error = Wire.endTransmission();
+    Serial.printf("Address: 0x%02x \t Error: %d\n", address, error); // added 27.02.2023 at Berlian
+
     if (error == 0) {
-      Serial.print("I2C device found at address 0x");
+      Serial.print("------------------------------- I2C device found at address 0x");
       if (address<16) {
         Serial.print("0");
       }
@@ -790,7 +942,6 @@ void i2c_scan() {
       if(address == 0x3E) GROVE_LCD_AVAILABLE = true;
       if(address == 0x40) INA219_AVAILABLE    = true;
       if(address == 0x48) ADS1115_AVAILABLE   = true;
-
       nDevices++;
     }
     else if (error==4) {
@@ -803,17 +954,11 @@ void i2c_scan() {
   }
   if (nDevices == 0) {
     Serial.println("No I2C devices found\n");
-    digitalWrite(2, HIGH);   // turn the LED on (HIGH is the voltage level)
-    digitalWrite(18, HIGH); 
-    delay(100);                       // wait for a second
-    digitalWrite(2, LOW);    // turn the LED off by making the voltage LOW
-    digitalWrite(18, LOW); 
-    delay(500);                       // wait for a second
   }
   else {
     Serial.println("done\n");
   }
-  delay(2000);          
+  // Wire.endTransmission(false); // added 03.03.2023 Friday MKE2 (issue fixed)
 }
 
 void display_uptime_top_row(){
@@ -961,6 +1106,20 @@ float readChannel(ADS1115_MUX channel) {
   voltage = adc.getResult_mV(); // alternative: getResult_mV for Millivolt
   return voltage;
 }
+
+float get_ambient_temp()
+{
+    int a = analogRead(pinTempSensor);
+    int scaled = map(a,0,8192,0,1023);
+    float R = 1023.0/scaled-1.0; // 1023 = 1 ... 8192 = 8
+    R = R0*R;
+
+    float temperature = 1.0/(log(R/R0)/B+1/298.15)-273.15; // convert to temperature via datasheet
+    // Serial.printf("analogRead at pin %d = %d and R value = %f\n", pinTempSensor, a, R);
+    // Serial.print("temperature = ");
+    // Serial.println(temperature);
+    return temperature;
+}
   
 void BLYNK_TASK(){
     tick++; // to replace tick
@@ -969,10 +1128,20 @@ void BLYNK_TASK(){
       read_ads1115(); //   Blynk.virtualWrite(V18, ads_readout) happening inside func
     else
       Blynk.virtualWrite(V18, "ADS1115 Not Connected");
-    if(tick % 3 == 0)
+    if(tick % 3 == 0){
       on_onboard_led();
-    else
+      if(busvoltage >= 13)
+        setRGBtoWhite();
+      else if(busvoltage >= 12 && busvoltage < 13)
+        setRGBtoBlue();
+      else if(busvoltage >= 11 && busvoltage < 12)
+        setRGBtoGreen();
+      else
+        setRGBtoRed();
+    }
+    else{
       off_onboard_led();    
+    }
     String dateTime = get_timestamp();
     // Serial.print("Datetime:");
     // Serial.println(dateTime);
@@ -992,6 +1161,9 @@ void BLYNK_TASK(){
     Blynk.virtualWrite(V10, tempC);
     Blynk.virtualWrite(V11, humid);
     Blynk.virtualWrite(V12, jsonWeather);
+    Blynk.virtualWrite(V34, get_ambient_temp());
+
+    
     
     if(GROVE_LCD_AVAILABLE)
       lcd.clear();
@@ -1032,9 +1204,10 @@ void BLYNK_TASK(){
       if(GROVE_LCD_AVAILABLE){
         display_uptime_top_row();
         lcd.setCursor(0,1); // row 0, column 0
-        lcd.print(dateTime);
+        lcd.print("V: "+String(busvoltage)+"V I:"+String(current_mA)+"mA");
       }
     }    
+    rgb_LED_Off();      
 }
 
 BLYNK_CONNECTED() {
@@ -1184,4 +1357,34 @@ BLYNK_WRITE(V28){
 }
 
 
+void cycleRGB(){
+  setRGBtoRed();
+  vTaskDelay(250 / portTICK_PERIOD_MS);
+  setRGBtoGreen();  
+  vTaskDelay(250 / portTICK_PERIOD_MS);
+  setRGBtoBlue(); 
+  vTaskDelay(250 / portTICK_PERIOD_MS);
+}
+void rgb_LED_Off(){
+  leds.setColorRGB(i, 0, 0, 0);
+}
+void setRGBtoWhite(){
+  leds.setColorRGB(i, 255, 255, 255);
+}
+
+void setRGBtoRed(){
+  leds.setColorRGB(i, 255, 0, 0);
+}
+
+void setRGBtoGreen(){
+  leds.setColorRGB(i, 0, 255, 0);
+}
+
+void setRGBtoBlue(){
+  leds.setColorRGB(i, 0, 0, 255);
+}
+
+void mapRGBtoPH(byte r, byte g, byte b){
+  leds.setColorRGB(i, r, g, b);
+}
 

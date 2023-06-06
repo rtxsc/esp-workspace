@@ -23,8 +23,8 @@ Adafruit_NeoPixel   strip_ring(RING_COUNT, RING_PIN, NEO_GRB + NEO_KHZ800);
 #define DELAY_100MS     100
 
 
-#define DUMMY_BMI
-// #define AUTO_CONTROL
+// #define DUMMY_BMI
+#define AUTO_CONTROL
 // #define AUTO_DUMMY //  used for product features showcase
 // #define ENCODER_CONTROL
 // #define AUTO_LOOP
@@ -112,6 +112,12 @@ bool presence_detected = false;
 uint16_t DEFAULT_POS;       // will cause unavoidable low memory issue 24.06.2022
 uint16_t oldPosition  = 0;  // change to uint16_t 24.06.2022
 uint16_t newPosition;       // change to uint16_t 24.06.2022
+
+float weight_fran = 82.05;
+float weight_yazid = 60;
+float weight_squiter = 65;
+float weight_evie = 50;
+byte sequence = 0;
 
 GyverTM1637               disp(CLK, DIO);
 #ifdef CNC_SHIELD
@@ -388,10 +394,6 @@ void clearStrip(){
  void loop() {
 
   #ifdef DUMMY_BMI
-  float weight_fran = 82.05;
-  float weight_yazid = 60;
-  float weight_squiter = 65;
-  float weight_evie = 50;
   rainbow(10);
   dummy_bmi(170, weight_evie);
   rainbow(10);
@@ -506,6 +508,14 @@ void clearStrip(){
       byte here[4] = {_h, _e, _r, _e};
       disp.point(0);   
       disp.twistByte(here, 25);
+    }else if(millis() % 3 == 0){
+
+      byte sqnc[4] = {_S, _q, _n, _c};
+      disp.point(0);   
+      disp.scrollByte(sqnc, 25);
+      delay(500);
+      disp.displayInt(sequence);
+      delay(DELAY_100MS);
     }
     else{
       disp.displayInt(height_cm);
@@ -583,6 +593,28 @@ void clearStrip(){
         disp.twistByte(height, 1);     
         disp.scroll(height, 100);     
         delay(DELAY_MICROSEC);
+
+        if(sequence == 0){
+          rainbow(10);
+          dummy_bmi(170, weight_evie);
+          beep_twice();
+        }
+        else if(sequence == 1){
+          rainbow(10);
+          dummy_bmi(158, weight_squiter);
+          beep_once();
+        }
+        else if(sequence == 2){
+          rainbow(10);
+          dummy_bmi(151, weight_fran);
+          beep_thrice();
+
+        }else{
+          rainbow(10);
+          dummy_bmi(161, weight_yazid);
+          beep_once();
+        }
+        
 
         #ifdef DEBUG_MODE
         Serial.print("!!!!!!!!!!!!!!!!!!!!!!!!!!! Moving to newPosition at: ");
@@ -753,6 +785,8 @@ void clearStrip(){
     disp.point(0);   
     disp.twistByte(done, 25);
     Serial.println(":::: IDLE ::::"); 
+    sequence++; // increment the sequence for dummy bmi
+    if(sequence > 3)  sequence = 0;
   }
     disable_stepper();
     delay(1000); // master delay in this USER INPUT loop
