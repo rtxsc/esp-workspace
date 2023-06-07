@@ -12,7 +12,9 @@ Connected and Disconnected logic furnished 15 Feb 2023
 // #define ESP32S2_5
 // #define ESP32S2_6
 // #define ESP32C3_4
-#define ESP32DEV_0
+// #define ESP32DEV_1
+#define ESP32DEV_2
+
 
 /* Comment this out to disable prints and save space */
 #define BLYNK_PRINT Serial
@@ -37,11 +39,15 @@ Connected and Disconnected logic furnished 15 Feb 2023
 #elif defined ESP32S2_6
   #define BLYNK_DEVICE_NAME "AASAS M06"
   #define BLYNK_AUTH_TOKEN "qtER7nxNJH1QioLqmH_rE688VdJ5i0L0"
-#elif defined ESP32DEV_0
-  #include "GroveBase-ESPDuino32-Mapping.h"
+#elif defined ESP32DEV_1
   #define BLYNK_DEVICE_NAME "AASAS M07"
   #define BLYNK_AUTH_TOKEN "K-NDkXmOkZNC3TIKZo6EOrqdQQ8-Mr_f"
+#elif defined ESP32DEV_2
+  #define BLYNK_DEVICE_NAME "AASAS M08"
+  #define BLYNK_AUTH_TOKEN "VoVZgVSmyKThZyh8KSS9oNq7gEcPLk0b"
 #endif
+
+#include "GroveBase-ESPDuino32-Mapping.h"
 
 #include <Wire.h>
 #include<ADS1115_WE.h> 
@@ -69,7 +75,7 @@ Connected and Disconnected logic furnished 15 Feb 2023
 #define NUMPIXELS   1 
 #define DELAYVAL    100 
 
-#ifdef ESP32DEV_0
+#if defined (ESP32DEV_1) || defined (ESP32DEV_2)  
   #define IN1         GROVE_D2
   #define IN2         GROVE_D3
   #define IN3         GROVE_D4
@@ -77,6 +83,8 @@ Connected and Disconnected logic furnished 15 Feb 2023
   #define NUM_LEDS              1
   ChainableLED                  leds(GROVE_A0, GROVE_A1, NUM_LEDS); // (LEAVE A1 EMPTY)
   byte                          i = 0; // CHAINABLE LED ARRAY
+  const int trig_pin = GROVE_D6; // D7 default
+  const int echo_pin = GROVE_D7; // D6 default
 #else
   #define IN1         19
   #define IN2         20
@@ -85,6 +93,8 @@ Connected and Disconnected logic furnished 15 Feb 2023
   #define NUM_LEDS              1
   ChainableLED                  leds(23, 24, NUM_LEDS); // (LEAVE A1 EMPTY)
   byte                          i = 0; // CHAINABLE LED ARRAY
+  const int trig_pin = 33; // D7 default
+  const int echo_pin = 34; // D6 default
 #endif
 
 #ifdef ESP32C3
@@ -98,10 +108,18 @@ Connected and Disconnected logic furnished 15 Feb 2023
 
 // #include <math.h>
 
+
+// Sound speed in air
+#define SOUND_SPEED 340
+#define TRIG_PULSE_DURATION_US 10
+long ultrason_duration;
+float distance_cm;
+int waterLvlPercent;
+
 const int B = 4275;               // B value of the thermistor
 const int R0 = 100000;            // R0 = 100k
-#ifdef ESP32DEV_0
-const int pinTempSensor = GROVE_A3;    
+#if defined (ESP32DEV_1) || defined (ESP32DEV_2)  
+const int pinTempSensor = GROVE_A3;
 #else
 const int pinTempSensor = 1;     // Grove - Temperature Sensor connect to IO0
 #endif
@@ -111,19 +129,19 @@ char auth[] = BLYNK_AUTH_TOKEN;
 // char ssid[] = "UiTM WiFi IoT";
 // char pass[] = ""; // leave this empty as this is an open network
 
-// char ssid[] = "Robotronix";
-// char pass[] = "robotroxian"; // leave this empty as this is an open network
+// char ssid[] = "Robotronix MKE2";
+// char pass[] = "robotronix"; // leave this empty as this is an open network
 
-char ssid[] = "MaxisONE Fibre 2.4G";
-char pass[] = "respironics"; // leave this empty as this is an open network
-
-// char ssid[] = "Maxis Postpaid 128";
+// char ssid[] = "MaxisONE Fibre 2.4G";
 // char pass[] = "respironics"; // leave this empty as this is an open network
+
+char ssid[] = "Maxis Postpaid 128";
+char pass[] = "respironics"; // leave this empty as this is an open network
 
 #ifdef ESP32C3_4
   #define I2C_SDA                 8 
   #define I2C_SCL                 9
-#elif defined ESP32DEV_0
+#elif defined ESP32DEV_1 || defined (ESP32DEV_2)
   // use default i2c pinout
 #else
   #define I2C_SDA                 41 
@@ -268,13 +286,13 @@ float tempK ;
 float tempC ;
 float humid ; 
 
-String mac_str = "None";
-String esp_model = "None";
+String mac_str = "UNKNOWN MAC";
+String esp_model = "UNKNOWN ESP";
 
 void setup()
 {
   Serial.begin(115200);
-  #ifdef ESP32DEV_0
+  #if defined (ESP32DEV_1) || defined (ESP32DEV_2)  
     Wire.begin();
   #else
     Wire.begin(I2C_SDA, I2C_SCL);
@@ -300,6 +318,13 @@ void setup()
   if(strcmp(mac_addr,"7C:DF:A1:00:A7:0C")==0) esp_model = "ESP32S2-7";
   if(strcmp(mac_addr,"7C:DF:A1:00:A7:38")==0) esp_model = "ESP32S2-8";
 
+  if(strcmp(mac_addr,"C8:2B:96:B9:A9:58")==0) esp_model = "ESP32DEV1";
+  if(strcmp(mac_addr,"9C:9C:1F:E3:85:3C")==0) esp_model = "ESP32DEV2";
+  if(strcmp(mac_addr,"84:CC:A8:5E:6E:E8")==0) esp_model = "ESP32DEV3";
+  if(strcmp(mac_addr,"9C:9C:1F:C5:94:24")==0) esp_model = "ESP32DEV4";
+  if(strcmp(mac_addr,"84:0D:8E:E2:D6:D8")==0) esp_model = "ESP32DEV5";
+
+
   Serial.printf("[setup] %s Found!\n",esp_model);
   Serial.printf("[setup] MAC: %s\n", mac_addr);
   mac_str.remove(2,1); // remove the first : from MAC 
@@ -307,7 +332,7 @@ void setup()
   Serial.println("\nScanning ESP32s2 i2c port...");
   i2c_scan(); // this method discovered to be failed after the latest ESP32 core update 24.02.2023 (Friday)
   Serial.println("\nReinit i2c port");
-  #ifdef ESP32DEV_0
+  #if defined (ESP32DEV_1) || defined (ESP32DEV_2)  
     Wire.begin();
   #else
     Wire.begin(I2C_SDA, I2C_SCL);
@@ -359,6 +384,8 @@ void setup()
   pinMode(IN2, OUTPUT);
   pinMode(IN3, OUTPUT);
   pinMode(LED_BLUE, OUTPUT);
+  pinMode(trig_pin, OUTPUT); // We configure the trig as output
+  pinMode(echo_pin, INPUT); // We configure the echo as input
 
   #ifdef ESP32C3
     pinMode(R,OUTPUT);
@@ -1110,11 +1137,13 @@ float readChannel(ADS1115_MUX channel) {
 float get_ambient_temp()
 {
     int a = analogRead(pinTempSensor);
-    int scaled = map(a,0,8192,0,1023);
-    float R = 1023.0/scaled-1.0; // 1023 = 1 ... 8192 = 8
+    // int scaled = map(a,0,8192,0,1023);
+    // float R = 1023.0/scaled-1.0; // 1023 = 1 ... 8192 = 8
+    float R = 8191.0/a-8.0; 
+
     R = R0*R;
 
-    float temperature = 1.0/(log(R/R0)/B+1/298.15)-273.15; // convert to temperature via datasheet
+    float temperature = 8.0/(log(R/R0)/B+1/298.15)-273.15; // convert to temperature via datasheet
     // Serial.printf("analogRead at pin %d = %d and R value = %f\n", pinTempSensor, a, R);
     // Serial.print("temperature = ");
     // Serial.println(temperature);
@@ -1126,8 +1155,10 @@ void BLYNK_TASK(){
     getINA219();
     if(ADS1115_AVAILABLE) 
       read_ads1115(); //   Blynk.virtualWrite(V18, ads_readout) happening inside func
-    else
-      Blynk.virtualWrite(V18, "ADS1115 Not Connected");
+    else{
+      // Blynk.virtualWrite(V18, "ADS1115 Not Connected"); // before adding sonar SR04-M2
+      Blynk.virtualWrite(V18, "Water Level:" + String(get_water_level_cm())+" cm @ " + String(waterLvlPercent)+"%");
+    }
     if(tick % 3 == 0){
       on_onboard_led();
       if(busvoltage >= 13)
@@ -1163,8 +1194,6 @@ void BLYNK_TASK(){
     Blynk.virtualWrite(V12, jsonWeather);
     Blynk.virtualWrite(V34, get_ambient_temp());
 
-    
-    
     if(GROVE_LCD_AVAILABLE)
       lcd.clear();
 
@@ -1204,7 +1233,7 @@ void BLYNK_TASK(){
       if(GROVE_LCD_AVAILABLE){
         display_uptime_top_row();
         lcd.setCursor(0,1); // row 0, column 0
-        lcd.print("V: "+String(busvoltage)+"V I:"+String(current_mA)+"mA");
+        lcd.print(String(busvoltage)+"V I:"+String(current_mA)+"mA");
       }
     }    
     rgb_LED_Off();      
@@ -1386,5 +1415,27 @@ void setRGBtoBlue(){
 
 void mapRGBtoPH(byte r, byte g, byte b){
   leds.setColorRGB(i, r, g, b);
+}
+
+float get_water_level_cm() {
+  // Set up the signal
+  digitalWrite(trig_pin, LOW);
+  delayMicroseconds(2);
+ // Create a 10 µs impulse
+  digitalWrite(trig_pin, HIGH);
+  delayMicroseconds(TRIG_PULSE_DURATION_US);
+  digitalWrite(trig_pin, LOW);
+
+  // Return the wave propagation time (in µs)
+  ultrason_duration = pulseIn(echo_pin, HIGH);
+
+//distance calculation
+  distance_cm = ultrason_duration * SOUND_SPEED/2 * 0.0001;
+  waterLvlPercent = map(distance_cm,150,30,0,100);  
+
+  // We print the distance on the serial port
+  // Serial.print("Distance (cm): ");
+  // Serial.println(distance_cm);
+  return distance_cm;
 }
 
