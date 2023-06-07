@@ -89,12 +89,12 @@ Connected and Disconnected logic furnished 15 Feb 2023
   #define IN1         19
   #define IN2         20
   #define IN3         21
-  #define LED_BLUE    22  // assumption
+  #define LED_BLUE    26  // assumption IO26 on ESP32S2
   #define NUM_LEDS              1
-  ChainableLED                  leds(23, 24, NUM_LEDS); // (LEAVE A1 EMPTY)
+  ChainableLED                  leds(35, 36, NUM_LEDS); // (LEAVE A1 EMPTY) Dummy 35,36 on ESP32S2
   byte                          i = 0; // CHAINABLE LED ARRAY
-  const int trig_pin = 33; // D7 default
-  const int echo_pin = 34; // D6 default
+  const int trig_pin = 33; // Dummy 33 on ESP32S2
+  const int echo_pin = 34; // Dummy 34 on ESP32S2
 #endif
 
 #ifdef ESP32C3
@@ -132,11 +132,11 @@ char auth[] = BLYNK_AUTH_TOKEN;
 // char ssid[] = "Robotronix MKE2";
 // char pass[] = "robotronix"; // leave this empty as this is an open network
 
-// char ssid[] = "MaxisONE Fibre 2.4G";
-// char pass[] = "respironics"; // leave this empty as this is an open network
-
-char ssid[] = "Maxis Postpaid 128";
+char ssid[] = "MaxisONE Fibre 2.4G";
 char pass[] = "respironics"; // leave this empty as this is an open network
+
+// char ssid[] = "Maxis Postpaid 128";
+// char pass[] = "respironics"; // leave this empty as this is an open network
 
 #ifdef ESP32C3_4
   #define I2C_SDA                 8 
@@ -1157,7 +1157,7 @@ void BLYNK_TASK(){
       read_ads1115(); //   Blynk.virtualWrite(V18, ads_readout) happening inside func
     else{
       // Blynk.virtualWrite(V18, "ADS1115 Not Connected"); // before adding sonar SR04-M2
-      Blynk.virtualWrite(V18, "Water Level:" + String(get_water_level_cm())+" cm @ " + String(waterLvlPercent)+"%");
+      Blynk.virtualWrite(V18, "Water Level = " + String(get_water_level_cm())+" cm @ " + String(waterLvlPercent)+"%");
     }
     if(tick % 3 == 0){
       on_onboard_led();
