@@ -6,7 +6,7 @@
 
 // Set your Board ID (ESP32 Sender #1 = BOARD_ID 1, ESP32 Sender #2 = BOARD_ID 2, etc)
 #ifdef ESP32C3
-  #define BOARD_ID    0x03   
+  #define BOARD_ID    "ESP32C3-7" // enter model name here 
   #define LED         19    // 19 if ESP32-C3
   #define RED         0x03 // 0x03 if ESP32-C3
   #define GRN         0x04 // 0x04 if ESP32-C3
@@ -23,17 +23,25 @@ bool send_success = false;
 //MAC Address of the receiver AC:67:B2:25:85:78 (this is the AFS server - THE ONLY ONE SERVER)
 //uint8_t serverAddress[] = {0xAC, 0x67, 0xB2, 0x25, 0x85, 0x78}; // AFS(one) at Block N
 // C8:2B:96:B9:A9:58
-uint8_t serverAddress[] = {0xC8, 0x2B, 0x96, 0xB9, 0xA9, 0x58}; // AFS2 at MKE2
+
+/*
+[setup] ESP32DEV-5 Found!
+[setup] MAC: 84:0D:8E:E2:D6:D8
+*/
+uint8_t serverAddress[] = {0x84, 0x0D, 0x8E, 0xE2, 0xD6, 0xD8}; // ESP32DEV-5 
+// uint8_t serverAddress[] = {0xC8, 0x2B, 0x96, 0xB9, 0xA9, 0x58}; // AFS2 at MKE2
 
 // Insert your SSID following the SSID connected by the server ! TAKE NOTE
-constexpr char WIFI_SSID[] = "Maxis Postpaid 128 5G";
+constexpr char WIFI_SSID[] = "MaxisONE Fibre 2.4G";
 
 //Structure example to send data
 //Must match the receiver structure
 typedef struct struct_message {
-    int id;
+    String id;
     float temp;
     float humi;
+    float moisture;
+    float rain;
     int payload_id;
 } struct_message;
 
@@ -70,7 +78,9 @@ int32_t getWiFiChannel(const char *ssid) {
 // callback when data is sent
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
  Serial.print("\n\nBoard ID:");
- Serial.println(BOARD_ID,HEX);
+//  Serial.println(BOARD_ID,HEX);
+  Serial.println(BOARD_ID);
+
   Serial.print("Last Packet Send Status:");
   if(status == ESP_NOW_SEND_SUCCESS)  send_success = true;
   else                                send_success = false;
@@ -85,6 +95,12 @@ void setup() {
   pinMode(RED,OUTPUT);
   pinMode(GRN,OUTPUT);
   pinMode(BLU,OUTPUT);
+
+  String mac_str = WiFi.macAddress();
+  const char* mac_addr = mac_str.c_str();
+  Serial.print("MAC (String):");
+  Serial.println(mac_str);
+  Serial.printf("MAC (const char): %s\n", mac_addr);
 
   // Set device as a Wi-Fi Station and set channel
   WiFi.mode(WIFI_STA);
@@ -154,7 +170,9 @@ void loop() {
     //Set values to send
     myData.id = BOARD_ID;
     myData.temp = random(20,50);
-    myData.humi = random(50,100);
+    myData.humi = analogRead(3); // random(50,100);
+    myData.moisture = map(analogRead(3),0,2500,0,100); // moist percent
+    myData.rain = analogRead(1); // IO1
     myData.payload_id = payload_id++;
      
     //Send message via ESP-NOW

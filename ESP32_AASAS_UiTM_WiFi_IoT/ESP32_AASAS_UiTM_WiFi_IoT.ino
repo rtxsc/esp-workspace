@@ -13,8 +13,10 @@ Connected and Disconnected logic furnished 15 Feb 2023
 // #define ESP32S2_6
 // #define ESP32C3_4
 // #define ESP32DEV_1
-#define ESP32DEV_2
-
+// #define ESP32DEV_2
+// #define ESP32DEV_3
+// #define ESP32DEV_4
+#define ESP32DEV_5
 
 /* Comment this out to disable prints and save space */
 #define BLYNK_PRINT Serial
@@ -45,10 +47,16 @@ Connected and Disconnected logic furnished 15 Feb 2023
 #elif defined ESP32DEV_2
   #define BLYNK_DEVICE_NAME "AASAS M08"
   #define BLYNK_AUTH_TOKEN "VoVZgVSmyKThZyh8KSS9oNq7gEcPLk0b"
+#elif defined ESP32DEV_4
+  #define BLYNK_DEVICE_NAME "AASAS M09"
+  #define BLYNK_AUTH_TOKEN "ZELuVGWY16O3KPW8mLkgkdISj2ohVgP7"
+#elif defined ESP32DEV_5
+  #define BLYNK_DEVICE_NAME "AASAS M10"
+  #define BLYNK_AUTH_TOKEN "Wo6dEX9FFGRjR-fbRShY-FxM9uYAYdqp"
 #endif
 
 #include "GroveBase-ESPDuino32-Mapping.h"
-
+#include <esp_now.h>
 #include <Wire.h>
 #include<ADS1115_WE.h> 
 #include "rgb_lcd.h"
@@ -70,19 +78,106 @@ Connected and Disconnected logic furnished 15 Feb 2023
 #include "DS1307.h"
 #include <ChainableLED.h>
 
+TaskHandle_t Task1; // ESPNOW
+TaskHandle_t Task2; // BLYNK
+
+// MAC Address of the receiver #1 => 9c:9c:1f:c5:94:24 (ESP01-client-1)
+uint8_t client1_mac[] = {0x9C, 0x9C, 0x1F, 0xC5, 0x94, 0x24};
+String client1_mac_string = "9c:9c:1f:c5:94:24"; // must be lowercase 27.08.2022 Sat
+const char* client1_cchar = client1_mac_string.c_str();
+
+// MAC Address of the receiver #2 => 9c:9c:1f:e3:85:3c (ESP01-client-2)
+uint8_t client2_mac[] = {0x9C, 0x9C, 0x1F, 0xE3, 0x85, 0x3C};
+String client2_mac_string = "9c:9c:1f:e3:85:3c"; // must be lowercase 27.08.2022 Sat
+const char* client2_cchar = client2_mac_string.c_str();
+
+// MAC Address of the receiver #3  7C:DF:A1:AF:AA:B4 (ESP32-C3 26.08.2022)
+// 7C:DF:A1:AF:AB:00 (changed 9 June 2023 after crosscheck)
+uint8_t client3_mac[] = {0x7C, 0xDF, 0xA1, 0xAF, 0xAB, 0x00};
+String client3_mac_string = "7c:df:a1:af:ab:00"; // must be lowercase 27.08.2022 Sat
+const char* client3_cchar = client3_mac_string.c_str();
+
+//7C:DF:A1:AF:AD:20 (C3-7)
+uint8_t client7_mac[] = {0x7C, 0xDF, 0xA1, 0xAF, 0xAD, 0x20};
+String client7_mac_string = "7c:df:a1:af:ad:20"; // new C3-7 added 9.june.2023
+const char* client7_cchar = client7_mac_string.c_str();
+
+// Structure example to receive data
+// Must match the sender structure
+typedef struct struct_message {
+  String id;
+  float temp;
+  float humi;
+  float moisture;
+  float rain;
+  unsigned int readingId;
+} struct_message;
+
+struct_message incomingReadings;
+
+//Structure example to send data
+//Must match the receiver structure (client-1 and client-2)
+typedef struct struct_control {
+    int control;
+} struct_control;
+
+
+//Create a struct_message called sendControl
+struct_control sendControl;
+JSONVar     board;
+bool esp_now_initialized = false;
+#define CORE_0      0x00
+#define CORE_1      0x01
+
+String jsonString1 = "None";
+String dt1 = "None";
+float temp1 = 0;
+float humi1 = 0;
+float moist1 = 0;
+float rain1 = 0;
+uint16_t read_id1 = 0;
+uint16_t prev_read_id1 = 0;
+
+String jsonString2 = "None";
+String dt2 = "None";
+float temp2 = 0;
+float humi2 = 0;
+float moist2 = 0;
+float rain2 = 0;
+uint16_t read_id2 = 0;
+uint16_t prev_read_id2 = 0;
+
+
+String jsonString3 = "None";
+String dt3 = "None";
+float temp3 = 0;
+float humi3 = 0;
+float moist3 = 0;
+float rain3 = 0;
+uint16_t read_id3 = 0;
+uint16_t prev_read_id3 = 0;
+
+String jsonString7 = "None";
+String dt7 = "None";
+float temp7 = 0;
+float humi7 = 0;
+float moist7 = 0;
+float rain7 = 0;
+uint16_t read_id7 = 0;
+uint16_t prev_read_id7 = 0;
 
 #define RGB         18 
 #define NUMPIXELS   1 
 #define DELAYVAL    100 
 
-#if defined (ESP32DEV_1) || defined (ESP32DEV_2)  
+#if defined (ESP32DEV_1) || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5)   
   #define IN1         GROVE_D2
   #define IN2         GROVE_D3
   #define IN3         GROVE_D4
   #define LED_BLUE    GROVE_D5
-  #define NUM_LEDS              1
-  ChainableLED                  leds(GROVE_A0, GROVE_A1, NUM_LEDS); // (LEAVE A1 EMPTY)
-  byte                          i = 0; // CHAINABLE LED ARRAY
+  #define NUM_LEDS    1
+  ChainableLED        leds(GROVE_A0, GROVE_A1, NUM_LEDS); // (LEAVE A1 EMPTY)
+  byte                i = 0; // CHAINABLE LED ARRAY
   const int trig_pin = GROVE_D6; // D7 default
   const int echo_pin = GROVE_D7; // D6 default
 #else
@@ -90,9 +185,9 @@ Connected and Disconnected logic furnished 15 Feb 2023
   #define IN2         20
   #define IN3         21
   #define LED_BLUE    26  // assumption IO26 on ESP32S2
-  #define NUM_LEDS              1
-  ChainableLED                  leds(35, 36, NUM_LEDS); // (LEAVE A1 EMPTY) Dummy 35,36 on ESP32S2
-  byte                          i = 0; // CHAINABLE LED ARRAY
+  #define NUM_LEDS     1
+  ChainableLED        leds(35, 36, NUM_LEDS); // (LEAVE A1 EMPTY) Dummy 35,36 on ESP32S2
+  byte                i = 0; // CHAINABLE LED ARRAY
   const int trig_pin = 33; // Dummy 33 on ESP32S2
   const int echo_pin = 34; // Dummy 34 on ESP32S2
 #endif
@@ -118,7 +213,7 @@ int waterLvlPercent;
 
 const int B = 4275;               // B value of the thermistor
 const int R0 = 100000;            // R0 = 100k
-#if defined (ESP32DEV_1) || defined (ESP32DEV_2)  
+#if defined (ESP32DEV_1) || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5)   
 const int pinTempSensor = GROVE_A3;
 #else
 const int pinTempSensor = 1;     // Grove - Temperature Sensor connect to IO0
@@ -141,7 +236,7 @@ char pass[] = "respironics"; // leave this empty as this is an open network
 #ifdef ESP32C3_4
   #define I2C_SDA                 8 
   #define I2C_SCL                 9
-#elif defined ESP32DEV_1 || defined (ESP32DEV_2)
+#elif defined ESP32DEV_1 || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5)   
   // use default i2c pinout
 #else
   #define I2C_SDA                 41 
@@ -292,7 +387,7 @@ String esp_model = "UNKNOWN ESP";
 void setup()
 {
   Serial.begin(115200);
-  #if defined (ESP32DEV_1) || defined (ESP32DEV_2)  
+  #if defined (ESP32DEV_1) || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5)   
     Wire.begin();
   #else
     Wire.begin(I2C_SDA, I2C_SCL);
@@ -318,11 +413,11 @@ void setup()
   if(strcmp(mac_addr,"7C:DF:A1:00:A7:0C")==0) esp_model = "ESP32S2-7";
   if(strcmp(mac_addr,"7C:DF:A1:00:A7:38")==0) esp_model = "ESP32S2-8";
 
-  if(strcmp(mac_addr,"C8:2B:96:B9:A9:58")==0) esp_model = "ESP32DEV1";
-  if(strcmp(mac_addr,"9C:9C:1F:E3:85:3C")==0) esp_model = "ESP32DEV2";
-  if(strcmp(mac_addr,"84:CC:A8:5E:6E:E8")==0) esp_model = "ESP32DEV3";
-  if(strcmp(mac_addr,"9C:9C:1F:C5:94:24")==0) esp_model = "ESP32DEV4";
-  if(strcmp(mac_addr,"84:0D:8E:E2:D6:D8")==0) esp_model = "ESP32DEV5";
+  if(strcmp(mac_addr,"C8:2B:96:B9:A9:58")==0) esp_model = "ESP32DEV-1";
+  if(strcmp(mac_addr,"9C:9C:1F:E3:85:3C")==0) esp_model = "ESP32DEV-2";
+  if(strcmp(mac_addr,"84:CC:A8:5E:6E:E8")==0) esp_model = "ESP32DEV-3";
+  if(strcmp(mac_addr,"9C:9C:1F:C5:94:24")==0) esp_model = "ESP32DEV-4";
+  if(strcmp(mac_addr,"84:0D:8E:E2:D6:D8")==0) esp_model = "ESP32DEV-5";
 
 
   Serial.printf("[setup] %s Found!\n",esp_model);
@@ -332,7 +427,7 @@ void setup()
   Serial.println("\nScanning ESP32s2 i2c port...");
   i2c_scan(); // this method discovered to be failed after the latest ESP32 core update 24.02.2023 (Friday)
   Serial.println("\nReinit i2c port");
-  #if defined (ESP32DEV_1) || defined (ESP32DEV_2)  
+  #if defined (ESP32DEV_1) || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5)   
     Wire.begin();
   #else
     Wire.begin(I2C_SDA, I2C_SCL);
@@ -470,16 +565,220 @@ void setup()
   loopRGB();
   rgbOff();
  
-  timer.setInterval(1000L, BLYNK_TASK);
-  timer.setInterval(1000L, get_weather);
-}
+
+  xTaskCreatePinnedToCore(
+      BLYNK_HandlerTask,        /* Task function. */
+      "BLYNK",                  /* name of task. */
+      10000,                    /* Stack size of task */
+      NULL,                     /* parameter of the task */
+      1,                        /* priority of the task */
+      &Task2,                   /* Task handle to keep track of created task */
+      
+      CORE_0);                  /* pin task to core 0 */     
+  delay(500); 
+
+  xTaskCreatePinnedToCore(
+      ESPNOW_HandlerTask,       /* Task function. */
+      "ESPNOW",                 /* name of task. */
+      10000,                    /* Stack size of task */
+      NULL,                     /* parameter of the task */
+      1,                        /* priority of the task */
+      &Task1,                   /* Task handle to keep track of created task */
+      CORE_1);                  /* pin task to core 1 */                  
+  delay(500); 
+
+
+} // end of setup
 
 
 void loop()
 {
-  Blynk.run();
-  timer.run();
+  // Blynk.run();
+  // timer.run();
 }
+
+
+// callback when data is sent
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.print("\r\nLast Packet Send Status:\t");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+}
+
+
+// callback function that will be executed when data is received
+void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) { 
+
+  // Copies the sender mac address to a string
+  char macStr[18];
+  Serial.print("Packet received from: ");
+  snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+           mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+  // Serial.println(macStr); // UNCOMMENT THIS TO FIGURE OUT THE CLIENT'S MAC 27.08.2022
+  if(strcmp(macStr, client1_cchar) == 0)      
+  {
+    Serial.println("Client ID 1");
+  }
+  if(strcmp(macStr, client2_cchar) == 0) 
+  {
+    Serial.println("Client ID 2");
+  }
+  if(strcmp(macStr, client3_cchar) == 0) 
+  {
+    Serial.println("Client ESP32C3-3");
+  }
+  if(strcmp(macStr, client7_cchar) == 0) 
+  {
+    Serial.println("Client ESP32C3-7");
+  }
+  // Serial.println("Unknown Client! Check client's MAC");
+
+
+  memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
+
+  // must use double quote for the json label 27.08.2022
+  board["d"] = incomingReadings.id; 
+  board["#"] = String(incomingReadings.readingId); 
+  board["t"] = incomingReadings.temp; 
+  board["h"] = incomingReadings.humi; 
+  board["m"] = incomingReadings.moisture; 
+  board["r"] = incomingReadings.rain; 
+
+  if(incomingReadings.id == "ESP32C3-1"){
+    temp1 = incomingReadings.temp;
+    humi1 = incomingReadings.humi;
+    moist1 = incomingReadings.moisture;
+    rain1 = incomingReadings.rain;
+    read_id1 = incomingReadings.readingId;
+    dt1 = get_timestamp();
+    jsonString1 = JSON.stringify(board);
+  }
+  if(prev_read_id1 != read_id1){
+    prev_read_id1 = read_id1;
+  }
+
+  if(incomingReadings.id == "ESP32C3-2"){
+    temp2 = incomingReadings.temp;
+    humi2 = incomingReadings.humi;
+    moist2 = incomingReadings.moisture;
+    rain2 = incomingReadings.rain;
+    read_id2 = incomingReadings.readingId;
+    dt2 = get_timestamp();
+    jsonString2 = JSON.stringify(board);
+  }
+  if(prev_read_id2 != read_id2){
+    prev_read_id2 = read_id2;
+  } 
+
+  if(incomingReadings.id == "ESP32C3-3"){
+    temp3 = incomingReadings.temp;
+    humi3 = incomingReadings.humi;
+    moist3 = incomingReadings.moisture;
+    rain3 = incomingReadings.rain;
+    read_id3 = incomingReadings.readingId;
+    dt3 = get_timestamp();
+    jsonString3 = JSON.stringify(board);
+  }
+  if(prev_read_id3 != read_id3){
+    prev_read_id3 = read_id3;
+  }
+
+  if(incomingReadings.id == "ESP32C3-7"){
+    temp7 = incomingReadings.temp;
+    humi7 = incomingReadings.humi;
+    moist7 = incomingReadings.moisture;
+    rain7 = incomingReadings.rain;
+    read_id7 = incomingReadings.readingId;
+    dt7 = get_timestamp();
+    jsonString7 = JSON.stringify(board);
+  }
+  if(prev_read_id7 != read_id7){
+    prev_read_id7 = read_id7;
+  }
+  Serial.printf("\nt:%.2f h:%.2f m:%.2f r:%.2f id:%d\n", temp3,humi3,moist3,rain3,read_id3);
+  Serial.println(dt3);
+  Serial.println(jsonString3);
+
+  Serial.printf("\nt:%.2f h:%.2f m:%.2f r:%.2f id:%d\n", temp7,humi7,moist7,rain7,read_id7);
+  Serial.println(dt7);
+  Serial.println(jsonString7);
+
+}
+
+
+void ESPNOW_HandlerTask(void * pvParameters) 
+{
+  Serial.print("ESPNOW_HandlerTask running on core ");
+  Serial.println(xPortGetCoreID());
+  // Init ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
+  }
+  esp_now_initialized = true; // this will allow the BlynkWrite to send out signal via espnow protocol
+  
+  // Once ESPNow is successfully Init, we will register for recv callback to
+  // get recv packer info (this can be used on server and client simultaneously 25.03.2022)
+  esp_now_register_recv_cb(OnDataRecv);
+
+  // coming from client-side code start ----------------------------------------------------------
+  esp_now_register_send_cb(OnDataSent);
+
+  // Register peer (peer here is going to be client-1) CLIENT ID 1
+  esp_now_peer_info_t peerInfo;
+  memset(&peerInfo, 0, sizeof(peerInfo)); // https://github.com/espressif/arduino-esp32/issues/6029
+  memcpy(peerInfo.peer_addr, client1_mac, 6);
+  peerInfo.encrypt = false;
+  
+  // Add peer CLIENT ID 1      
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    Serial.println("Failed to add peer client ID 1");
+    return;
+  }
+
+  // Register peer (peer here is going to be client-2) CLIENT ID 2
+  esp_now_peer_info_t peerInfo2;
+  memset(&peerInfo2, 0, sizeof(peerInfo2)); // https://github.com/espressif/arduino-esp32/issues/6029
+  memcpy(peerInfo2.peer_addr, client2_mac, 6);
+  peerInfo2.encrypt = false;
+  
+  // Add peer CLIENT ID 2       
+  if (esp_now_add_peer(&peerInfo2) != ESP_OK){
+    Serial.println("Failed to add peer client ID 2");
+    return;
+  }
+
+    // Register peer (peer here is going to be client-3) CLIENT ID 3
+  esp_now_peer_info_t peerInfo3;
+  memset(&peerInfo3, 0, sizeof(peerInfo3)); // https://github.com/espressif/arduino-esp32/issues/6029
+  memcpy(peerInfo3.peer_addr, client3_mac, 6);
+  peerInfo3.encrypt = false;
+  
+  // Add peer CLIENT ID 3       
+  if (esp_now_add_peer(&peerInfo3) != ESP_OK){
+    Serial.println("Failed to add peer client ID 3");
+    return;
+  }
+
+  // esp_now_peer_num_t 
+  // coming from client-side code end ----------------------------------------------------------
+
+  // leave this empty to reserve more CPU resources for other intensive tasks    
+  for(;;){} // empty forever loop (no need to do anything inside here otherwise it will cost some CPU time)
+} // end of FreeRTOS handler
+void BLYNK_HandlerTask(void * pvParameters) 
+{
+
+  timer.setInterval(1000L, BLYNK_TASK);
+  timer.setInterval(1000L, get_weather);
+
+  Serial.print("BLYNK_HandlerTask running on core ");
+  Serial.println(xPortGetCoreID());
+  for(;;){    
+    Blynk.run();
+    timer.run();
+  }
+} // end of FreeRTOS handler
+
 
 void try_wifi_connect(int timeout){
     wifiRetryCount++;
@@ -1157,7 +1456,10 @@ void BLYNK_TASK(){
       read_ads1115(); //   Blynk.virtualWrite(V18, ads_readout) happening inside func
     else{
       // Blynk.virtualWrite(V18, "ADS1115 Not Connected"); // before adding sonar SR04-M2
-      Blynk.virtualWrite(V18, "Water Level = " + String(get_water_level_cm())+" cm @ " + String(waterLvlPercent)+"%");
+      if(millis() % 2 == 0)
+        Blynk.virtualWrite(V18, "Water Level = " + String(get_water_level_cm())+" cm @ " + String(waterLvlPercent)+"%");
+      else
+        Blynk.virtualWrite(V18, "JSON C3 = " + jsonString3);
     }
     if(tick % 3 == 0){
       on_onboard_led();
@@ -1191,7 +1493,9 @@ void BLYNK_TASK(){
     Blynk.virtualWrite(V9, get_rssi_state(RSSI_dBm));
     Blynk.virtualWrite(V10, tempC);
     Blynk.virtualWrite(V11, humid);
-    Blynk.virtualWrite(V12, jsonWeather);
+    // Blynk.virtualWrite(V12, jsonWeather); // disabled temporarily
+    Blynk.virtualWrite(V12, "JSON C7 = " + jsonString7);
+
     Blynk.virtualWrite(V34, get_ambient_temp());
 
     if(GROVE_LCD_AVAILABLE)

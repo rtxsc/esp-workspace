@@ -62,6 +62,9 @@ C8:2B:96:B9:A9:58
 # ESP32C3-6 
 7C:DF:A1:AF:AC:B8 (aniq's c3 NOT REGISTERED)
 
+# ESP32C3-7
+7C:DF:A1:AF:AD:20 (freshley's C3 NOT REGISTERED)
+
 
 ###### ESP32-S2 #################################
 
