@@ -23,7 +23,7 @@ b8:27:eb:80:a4:3a
 
 ###### ESP32-DEV #################################
 
-# ESP32DEV-0
+# ESP32DEV-0 (condemned / broken)
 AC:67:B2:25:85:78 
 
 # ESP32DEV-1
@@ -39,7 +39,7 @@ C8:2B:96:B9:A9:58
 9c:9c:1f:c5:94:24
 9C:9C:1F:C5:94:24
 
-# ESP32DEV-5 
+# ESP32DEV-5 (currently at TBS as AASAS M10)
 84:0D:8E:E2:D6:D8
 
 
@@ -62,7 +62,11 @@ C8:2B:96:B9:A9:58
 # ESP32C3-6 
 7C:DF:A1:AF:AC:B8 (aniq's c3 NOT REGISTERED)
 
-# ESP32C3-7
+# ESP32C3-7 (checked 10.06.2023)
+7C:DF:A1:AF:A8:D8 
+# still in the MKE lab probably not registered
+
+# ESP32C3-8 (need to reupload to wrongly labelled C3-7 at TBS)
 7C:DF:A1:AF:AD:20 (freshley's C3 NOT REGISTERED)
 
 

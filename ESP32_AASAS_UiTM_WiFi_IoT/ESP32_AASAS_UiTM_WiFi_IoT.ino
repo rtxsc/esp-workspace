@@ -18,6 +18,9 @@ Connected and Disconnected logic furnished 15 Feb 2023
 // #define ESP32DEV_4
 #define ESP32DEV_5
 
+// #define LOCATION_MKE2_UiTM_WiFi_IoT // comment this line for TBS deployment
+// #define LOCATION_MKE2_MaxisONE // comment this line for TBS deployment
+
 /* Comment this out to disable prints and save space */
 #define BLYNK_PRINT Serial
 #define BLYNK_TEMPLATE_ID   "TMPLjsD8y_SC" // template ID for M04 and M05 then subcribing to Plus RM30.90 13Feb2023
@@ -97,20 +100,39 @@ uint8_t client3_mac[] = {0x7C, 0xDF, 0xA1, 0xAF, 0xAB, 0x00};
 String client3_mac_string = "7c:df:a1:af:ab:00"; // must be lowercase 27.08.2022 Sat
 const char* client3_cchar = client3_mac_string.c_str();
 
-//7C:DF:A1:AF:AD:20 (C3-7)
-uint8_t client7_mac[] = {0x7C, 0xDF, 0xA1, 0xAF, 0xAD, 0x20};
-String client7_mac_string = "7c:df:a1:af:ad:20"; // new C3-7 added 9.june.2023
-const char* client7_cchar = client7_mac_string.c_str();
+// 7C:DF:A1:AF:AD:24 (C3-4) added 10.06.2023 saturday after SKJMT IBIZ
+uint8_t client4_mac[] = {0x7C, 0xDF, 0xA1, 0xAF, 0xAD, 0x24};
+String client4_mac_string = "7c:df:a1:af:ad:24"; // new C3-74 added 9.june.2023
+const char* client4_cchar = client4_mac_string.c_str();
+
+// 7C:DF:A1:AF:AC:B8 (C3-6)
+uint8_t client6_mac[] = {0x7C, 0xDF, 0xA1, 0xAF, 0xAC, 0xB8}; // MAC not confirmed 10.june.2023
+String client6_mac_string = "7c:df:a1:af:ac:b8"; // MAC not confirmed 10.june.2023
+const char* client6_cchar = client6_mac_string.c_str(); // changed 10.june.2023 after SKJMT
+
+
+// 7C:DF:A1:AF:A8:D8(C3-7)
+uint8_t client7_mac[] = {0x7C, 0xDF, 0xA1, 0xAF, 0xA8, 0xD8}; // MAC not confirmed 10.june.2023
+String client7_mac_string = "7c:df:a1:af:a8:d8"; // MAC not confirmed 10.june.2023
+const char* client7_cchar = client7_mac_string.c_str(); // changed 10.june.2023 after SKJMT
+
+
+//7C:DF:A1:AF:AD:20 (C3-8)
+uint8_t client8_mac[] = {0x7C, 0xDF, 0xA1, 0xAF, 0xAD, 0x20}; // changed 10.june.2023 after SKJMT
+String client8_mac_string = "7c:df:a1:af:ad:20"; // new C3-7 added 9.june.2023
+const char* client8_cchar = client8_mac_string.c_str(); // changed 10.june.2023 after SKJMT
 
 // Structure example to receive data
-// Must match the sender structure
+// Must EXACTLY MATCH THE PATTERN of the sender's structure
 typedef struct struct_message {
   String id;
+  unsigned int readingId;
+  float volt;
+  float amps;
   float temp;
   float humi;
-  float moisture;
+  float mois;
   float rain;
-  unsigned int readingId;
 } struct_message;
 
 struct_message incomingReadings;
@@ -129,12 +151,15 @@ bool esp_now_initialized = false;
 #define CORE_0      0x00
 #define CORE_1      0x01
 
+bool displayESPNOW = false;
 String jsonString1 = "None";
 String dt1 = "None";
 float temp1 = 0;
 float humi1 = 0;
 float moist1 = 0;
 float rain1 = 0;
+float volt1 = 0;
+float amps1 = 0;
 uint16_t read_id1 = 0;
 uint16_t prev_read_id1 = 0;
 
@@ -144,9 +169,10 @@ float temp2 = 0;
 float humi2 = 0;
 float moist2 = 0;
 float rain2 = 0;
+float volt2 = 0;
+float amps2 = 0;
 uint16_t read_id2 = 0;
 uint16_t prev_read_id2 = 0;
-
 
 String jsonString3 = "None";
 String dt3 = "None";
@@ -154,8 +180,32 @@ float temp3 = 0;
 float humi3 = 0;
 float moist3 = 0;
 float rain3 = 0;
+float volt3 = 0;
+float amps3 = 0;
 uint16_t read_id3 = 0;
 uint16_t prev_read_id3 = 0;
+
+String jsonString4 = "None";
+String dt4 = "None";
+float temp4 = 0;
+float humi4 = 0;
+float moist4 = 0;
+float rain4 = 0;
+float volt4 = 0;
+float amps4 = 0;
+uint16_t read_id4 = 0;
+uint16_t prev_read_id4 = 0;
+
+String jsonString6 = "None";
+String dt6 = "None";
+float temp6 = 0;
+float humi6 = 0;
+float moist6 = 0;
+float rain6 = 0;
+float volt6 = 0;
+float amps6 = 0;
+uint16_t read_id6 = 0;
+uint16_t prev_read_id6 = 0;
 
 String jsonString7 = "None";
 String dt7 = "None";
@@ -163,8 +213,21 @@ float temp7 = 0;
 float humi7 = 0;
 float moist7 = 0;
 float rain7 = 0;
+float volt7 = 0;
+float amps7 = 0;
 uint16_t read_id7 = 0;
 uint16_t prev_read_id7 = 0;
+
+String jsonString8 = "None";
+String dt8 = "None";
+float temp8 = 0;
+float humi8 = 0;
+float moist8 = 0;
+float rain8 = 0;
+float volt8 = 0;
+float amps8 = 0;
+uint16_t read_id8 = 0;
+uint16_t prev_read_id8 = 0;
 
 #define RGB         18 
 #define NUMPIXELS   1 
@@ -221,14 +284,20 @@ const int pinTempSensor = 1;     // Grove - Temperature Sensor connect to IO0
 
 
 char auth[] = BLYNK_AUTH_TOKEN;
-// char ssid[] = "UiTM WiFi IoT";
-// char pass[] = ""; // leave this empty as this is an open network
+
+#ifdef LOCATION_MKE2_UiTM_WiFi_IoT
+  char ssid[] = "UiTM WiFi IoT";
+  char pass[] = ""; // leave this empty as this is an open network
+#elif defined LOCATION_MKE2_MaxisONE
+  char ssid[] = "MaxisONE Fibre 2.4G";
+  char pass[] = "respironics"; // leave this empty as this is an open network
+#else
+  char ssid[] = "MaxisONE Fibre 2.4G";
+  char pass[] = "respironics"; // leave this empty as this is an open network
+#endif
 
 // char ssid[] = "Robotronix MKE2";
 // char pass[] = "robotronix"; // leave this empty as this is an open network
-
-char ssid[] = "MaxisONE Fibre 2.4G";
-char pass[] = "respironics"; // leave this empty as this is an open network
 
 // char ssid[] = "Maxis Postpaid 128";
 // char pass[] = "respironics"; // leave this empty as this is an open network
@@ -237,7 +306,7 @@ char pass[] = "respironics"; // leave this empty as this is an open network
   #define I2C_SDA                 8 
   #define I2C_SCL                 9
 #elif defined ESP32DEV_1 || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5)   
-  // use default i2c pinout
+  // use default i2c pinoutx2
 #else
   #define I2C_SDA                 41 
   #define I2C_SCL                 40
@@ -271,6 +340,7 @@ float shuntvoltage;
 float busvoltage;
 float current_mA;
 
+bool I2C_LCD_AVAILABLE = false;
 bool GROVE_LCD_AVAILABLE = false; // true for debugging purpose 27.02.2023 | change to false 03.03.2023
 bool INA219_AVAILABLE = false;
 bool ADS1115_AVAILABLE = false;
@@ -437,7 +507,7 @@ void setup()
   if(INA219_AVAILABLE){
     initINA219();
   }
-  if(GROVE_LCD_AVAILABLE){
+  if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
     lcd.begin(16, 2);
     lcd.createChar(1, wave_right); // create block character
     lcd.createChar(2, wave_left); // create block character
@@ -502,7 +572,7 @@ void setup()
   Serial.print("ESP32 hostname after calling setting WiFi_STA: ");
   Serial.println(default_hostname);   /*New Hostname printed*/ 
 
-  if(GROVE_LCD_AVAILABLE){
+  if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
     try_wifi_connect(10); // pre-connection using WiFi.begin() with 10 second default timeout
     lcd.clear();
     lcd.setCursor(0,0);
@@ -512,7 +582,7 @@ void setup()
     lcd.print(ssid);
   }
 
-  if(GROVE_LCD_AVAILABLE){
+  if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
     lcd.clear();
     lcd.setCursor(0,0);
     lcd.print("Init TimeClient!");
@@ -553,7 +623,7 @@ void setup()
 
   Blynk.begin(auth, ssid, pass); // connectWiFi in Blynk is active. meaning connecting twice
 
-  if(GROVE_LCD_AVAILABLE){
+  if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
     lcd.clear();
     lcd.setCursor(0,0);
     lcd.print("Blynk Connected!");
@@ -626,9 +696,25 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
   {
     Serial.println("Client ESP32C3-3");
   }
+  if(strcmp(macStr, client4_cchar) == 0) 
+  {
+    Serial.println("Client ESP32C3-4");
+  }
+  // if(strcmp(macStr, client5_cchar) == 0) 
+  // {
+  //   Serial.println("Client ESP32C3-5");
+  // }
+  if(strcmp(macStr, client6_cchar) == 0) 
+  {
+    Serial.println("Client ESP32C3-6");
+  }
   if(strcmp(macStr, client7_cchar) == 0) 
   {
     Serial.println("Client ESP32C3-7");
+  }
+  if(strcmp(macStr, client8_cchar) == 0) 
+  {
+    Serial.println("Client ESP32C3-8");
   }
   // Serial.println("Unknown Client! Check client's MAC");
 
@@ -637,17 +723,22 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
 
   // must use double quote for the json label 27.08.2022
   board["d"] = incomingReadings.id; 
-  board["#"] = String(incomingReadings.readingId); 
+  board["#"] = String(incomingReadings.readingId);
+  board["v"] = incomingReadings.volt; 
+  board["a"] = incomingReadings.amps;  
   board["t"] = incomingReadings.temp; 
   board["h"] = incomingReadings.humi; 
-  board["m"] = incomingReadings.moisture; 
+  board["m"] = incomingReadings.mois; 
   board["r"] = incomingReadings.rain; 
+
 
   if(incomingReadings.id == "ESP32C3-1"){
     temp1 = incomingReadings.temp;
     humi1 = incomingReadings.humi;
-    moist1 = incomingReadings.moisture;
+    moist1 = incomingReadings.mois;
     rain1 = incomingReadings.rain;
+    volt1 = incomingReadings.volt;
+    amps1 = incomingReadings.amps;
     read_id1 = incomingReadings.readingId;
     dt1 = get_timestamp();
     jsonString1 = JSON.stringify(board);
@@ -659,8 +750,10 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
   if(incomingReadings.id == "ESP32C3-2"){
     temp2 = incomingReadings.temp;
     humi2 = incomingReadings.humi;
-    moist2 = incomingReadings.moisture;
+    moist2 = incomingReadings.mois;
     rain2 = incomingReadings.rain;
+    volt2 = incomingReadings.volt;
+    amps2 = incomingReadings.amps;
     read_id2 = incomingReadings.readingId;
     dt2 = get_timestamp();
     jsonString2 = JSON.stringify(board);
@@ -672,8 +765,10 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
   if(incomingReadings.id == "ESP32C3-3"){
     temp3 = incomingReadings.temp;
     humi3 = incomingReadings.humi;
-    moist3 = incomingReadings.moisture;
+    moist3 = incomingReadings.mois;
     rain3 = incomingReadings.rain;
+    volt3 = incomingReadings.volt;
+    amps3 = incomingReadings.amps;
     read_id3 = incomingReadings.readingId;
     dt3 = get_timestamp();
     jsonString3 = JSON.stringify(board);
@@ -682,25 +777,92 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     prev_read_id3 = read_id3;
   }
 
+  if(incomingReadings.id == "ESP32C3-4"){
+    temp4 = incomingReadings.temp;
+    humi4 = incomingReadings.humi;
+    moist4 = incomingReadings.mois;
+    rain4 = incomingReadings.rain;
+    volt4 = incomingReadings.volt;
+    amps4 = incomingReadings.amps;
+    read_id4 = incomingReadings.readingId;
+    dt4 = get_timestamp();
+    jsonString4 = JSON.stringify(board);
+  }
+  if(prev_read_id4 != read_id4){
+    prev_read_id4 = read_id4;
+  }
+
+  if(incomingReadings.id == "ESP32C3-6"){
+    temp6 = incomingReadings.temp;
+    humi6 = incomingReadings.humi;
+    moist6 = incomingReadings.mois;
+    rain6 = incomingReadings.rain;
+    volt6 = incomingReadings.volt;
+    amps6 = incomingReadings.amps;
+    read_id6 = incomingReadings.readingId;
+    dt6 = get_timestamp();
+    jsonString6 = JSON.stringify(board);
+  }
+  if(prev_read_id6 != read_id6){
+    prev_read_id6 = read_id6;
+  }
+
   if(incomingReadings.id == "ESP32C3-7"){
     temp7 = incomingReadings.temp;
     humi7 = incomingReadings.humi;
-    moist7 = incomingReadings.moisture;
+    moist7 = incomingReadings.mois;
     rain7 = incomingReadings.rain;
+    volt7 = incomingReadings.volt;
+    amps7 = incomingReadings.amps;
     read_id7 = incomingReadings.readingId;
     dt7 = get_timestamp();
     jsonString7 = JSON.stringify(board);
   }
+
   if(prev_read_id7 != read_id7){
     prev_read_id7 = read_id7;
   }
+
+  if(incomingReadings.id == "ESP32C3-8"){
+    temp8 = incomingReadings.temp;
+    humi8 = incomingReadings.humi;
+    moist8 = incomingReadings.mois;
+    rain8 = incomingReadings.rain;
+    volt8 = incomingReadings.volt;
+    amps8 = incomingReadings.amps;
+    read_id8 = incomingReadings.readingId;
+    dt8 = get_timestamp();
+    jsonString8 = JSON.stringify(board);
+  }
+
+  if(prev_read_id8 != read_id8){
+    prev_read_id8 = read_id8;
+  }
+
   Serial.printf("\nt:%.2f h:%.2f m:%.2f r:%.2f id:%d\n", temp3,humi3,moist3,rain3,read_id3);
+  Serial.printf("Volt[3]:%.2f Amps[3]:%.2f \n", volt3, amps3);
   Serial.println(dt3);
   Serial.println(jsonString3);
 
+  Serial.printf("\nt:%.2f h:%.2f m:%.2f r:%.2f id:%d\n", temp4,humi4,moist4,rain4,read_id4);
+  Serial.printf("Volt[4]:%.2f Amps[4]:%.2f \n", volt4, amps4);
+  Serial.println(dt4);
+  Serial.println(jsonString4);
+
+  Serial.printf("\nt:%.2f h:%.2f m:%.2f r:%.2f id:%d\n", temp6,humi6,moist6,rain6,read_id6);
+  Serial.println(dt6);
+  Serial.printf("Volt[6]:%.2f Amps[6]:%.2f \n", volt6, amps6);
+  Serial.println(jsonString6);
+
   Serial.printf("\nt:%.2f h:%.2f m:%.2f r:%.2f id:%d\n", temp7,humi7,moist7,rain7,read_id7);
   Serial.println(dt7);
+  Serial.printf("Volt[7]:%.2f Amps[7]:%.2f \n", volt7, amps7);
   Serial.println(jsonString7);
+
+  Serial.printf("\nt:%.2f h:%.2f m:%.2f r:%.2f id:%d\n", temp8,humi8,moist8,rain8,read_id8);
+  Serial.println(dt8);
+  Serial.printf("Volt[8]:%.2f Amps[8]:%.2f \n", volt8, amps8);
+  Serial.println(jsonString8);
 
 }
 
@@ -756,6 +918,42 @@ void ESPNOW_HandlerTask(void * pvParameters)
   // Add peer CLIENT ID 3       
   if (esp_now_add_peer(&peerInfo3) != ESP_OK){
     Serial.println("Failed to add peer client ID 3");
+    return;
+  }
+
+  // Register peer (peer here is going to be client-4) CLIENT ID 4
+  esp_now_peer_info_t peerInfo4;
+  memset(&peerInfo4, 0, sizeof(peerInfo4)); // https://github.com/espressif/arduino-esp32/issues/6029
+  memcpy(peerInfo4.peer_addr, client4_mac, 6);
+  peerInfo4.encrypt = false;
+  
+  // Add peer CLIENT ID 3       
+  if (esp_now_add_peer(&peerInfo4) != ESP_OK){
+    Serial.println("Failed to add peer client ID 4 (ESP32C3-4)");
+    return;
+  }
+
+    // Register peer (peer here is going to be client-4) CLIENT ID 4
+  esp_now_peer_info_t peerInfo6;
+  memset(&peerInfo6, 0, sizeof(peerInfo6)); // https://github.com/espressif/arduino-esp32/issues/6029
+  memcpy(peerInfo6.peer_addr, client6_mac, 6);
+  peerInfo6.encrypt = false;
+  
+  // Add peer CLIENT ID 3       
+  if (esp_now_add_peer(&peerInfo6) != ESP_OK){
+    Serial.println("Failed to add peer client ID 6 (ESP32C3-6)");
+    return;
+  }
+
+  // Register peer (peer here is going to be client-8) CLIENT ID 8
+  esp_now_peer_info_t peerInfo8;
+  memset(&peerInfo8, 0, sizeof(peerInfo8)); // https://github.com/espressif/arduino-esp32/issues/6029
+  memcpy(peerInfo8.peer_addr, client8_mac, 6);
+  peerInfo8.encrypt = false;
+  
+  // Add peer CLIENT ID 3       
+  if (esp_now_add_peer(&peerInfo8) != ESP_OK){
+    Serial.println("Failed to add peer client ID 8 (ESP32C3-8)");
     return;
   }
 
@@ -882,7 +1080,7 @@ void try_wifi_connect(int timeout){
       delay(2000);
     }
    
-    if(GROVE_LCD_AVAILABLE){
+    if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("-WiFi Connected-");
@@ -1144,7 +1342,7 @@ String readStringFromEEPROM(int addrOffset)
 }
 
 void clear_wifiRetryCounter(){
-  if(GROVE_LCD_AVAILABLE){
+  if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("Reset WiFi Retry!");
@@ -1156,7 +1354,7 @@ void clear_wifiRetryCounter(){
 }
 
 void clear_disconnCounter(){
-    if(GROVE_LCD_AVAILABLE){
+    if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("-Reset Disconn!-");
@@ -1174,7 +1372,7 @@ void clear_disconnCounter(){
 }
 
  void clear_restartCounter(){
-    if(GROVE_LCD_AVAILABLE){
+    if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("-Reset ESP32S2!-");
@@ -1265,6 +1463,7 @@ void i2c_scan() {
         Serial.print("0");
       }
       Serial.println(address,HEX);
+      if(address == 0x27) I2C_LCD_AVAILABLE = true;
       if(address == 0x3E) GROVE_LCD_AVAILABLE = true;
       if(address == 0x40) INA219_AVAILABLE    = true;
       if(address == 0x48) ADS1115_AVAILABLE   = true;
@@ -1456,10 +1655,12 @@ void BLYNK_TASK(){
       read_ads1115(); //   Blynk.virtualWrite(V18, ads_readout) happening inside func
     else{
       // Blynk.virtualWrite(V18, "ADS1115 Not Connected"); // before adding sonar SR04-M2
-      if(millis() % 2 == 0)
-        Blynk.virtualWrite(V18, "Water Level = " + String(get_water_level_cm())+" cm @ " + String(waterLvlPercent)+"%");
-      else
-        Blynk.virtualWrite(V18, "JSON C3 = " + jsonString3);
+        Blynk.virtualWrite(V18, "Water Level = " + String(get_water_level_cm())+" cm @ " + String(waterLvlPercent)+"%");      
+      /*
+      C3-3 to AASAS M10 (TBS)
+      C3-4 to AASAS M03 (MKE)
+      C3-8 to AASAS M10 (TBS)
+      */
     }
     if(tick % 3 == 0){
       on_onboard_led();
@@ -1494,58 +1695,66 @@ void BLYNK_TASK(){
     Blynk.virtualWrite(V10, tempC);
     Blynk.virtualWrite(V11, humid);
     // Blynk.virtualWrite(V12, jsonWeather); // disabled temporarily
-    Blynk.virtualWrite(V12, "JSON C7 = " + jsonString7);
+    Blynk.virtualWrite(V12, "C3-8 = " + jsonString8); // this should be C8 at TBS (need to commit DEV_5 as well for the change)
+    Blynk.virtualWrite(V15, "C3-6 = " + jsonString6); // taking over disconnected ts
 
     Blynk.virtualWrite(V34, get_ambient_temp());
 
-    if(GROVE_LCD_AVAILABLE)
+    if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE)
       lcd.clear();
 
-    if(tick % 2 == 0){
-      if(GROVE_LCD_AVAILABLE){
-        lcd.setCursor(0,0); // row 0, column 0
-        lcd.print("----"+ String(BLYNK_DEVICE_NAME)+"---"); // ----AASAS ONE---
-        lcd.setCursor(0,1);
-        lcd.print(dateTime);
-      }
-    }
-    else if(tick % 5 == 0){
-      if(GROVE_LCD_AVAILABLE){
-        lcd.setCursor(0,0); // row 0, column 0
-        lcd.print(ssid); // print connected SSID
-        lcd.setCursor(0,1);
-        lcd.print(dateTime);
-      }
-    }
-    else if(tick % 7 == 0){
-      if(GROVE_LCD_AVAILABLE){
-        lcd.setCursor(0,0); // row 0, column 0
-        lcd.print(esp_model); // print connected SSID
-        lcd.setCursor(0,1); // row 0, column 0
-        lcd.print(mac_str); // print connected SSID
-      }
-    }
-    else if(tick % 11 == 0){
-      if(GROVE_LCD_AVAILABLE){
-        lcd.setCursor(0,0); // row 0, column 0
-        lcd.print("RSSI: "+String(RSSI_dBm)+" dBm"); // print connected SSID
-        lcd.setCursor(0,1); // row 0, column 0
-        lcd.print(get_rssi_state(RSSI_dBm)); // print connected SSID
-      }
+    if(displayESPNOW){
+        #if defined LOCATION_MKE2_MaxisONE || defined (LOCATION_MKE2_UiTM_WiFi_IoT)
+          lcd.setCursor(0,0); // MKE2 
+          lcd.print("C3-4 #"+String(read_id4)+" V:" + String(volt4)); // print connected SSID
+          lcd.setCursor(0,1);
+          lcd.print("C3-7 #"+String(read_id7)+" V:" + String(volt7)); // print connected SSID
+        #else
+          lcd.setCursor(0,0); // TBS
+          lcd.print("C3-3 #"+String(read_id3)+" V:" + String(volt3)); // print connected SSID
+          lcd.setCursor(0,1);
+          lcd.print("C3-8 #"+String(read_id8)+" V:" + String(volt8)); // print connected SSID
+        #endif
     }
     else{
-      if(GROVE_LCD_AVAILABLE){
-        display_uptime_top_row();
-        lcd.setCursor(0,1); // row 0, column 0
-        lcd.print(String(busvoltage)+"V I:"+String(current_mA)+"mA");
-      }
-    }    
+       if(tick % 2 == 0){
+          if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
+            lcd.setCursor(0,0); // row 0, column 0
+            lcd.print("----"+ String(BLYNK_DEVICE_NAME)+"---"); // ----AASAS ONE---
+            lcd.setCursor(0,1);
+            lcd.print(dateTime);
+          }
+        }
+        else if(tick % 7 == 0){
+          if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
+            lcd.setCursor(0,0); // row 0, column 0
+            lcd.print(esp_model); // print connected SSID
+            lcd.setCursor(0,1); // row 0, column 0
+            lcd.print(mac_str); // print connected SSID
+          }
+        }
+        else if(tick % 11 == 0){
+          if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
+            lcd.setCursor(0,0); // row 0, column 0
+            lcd.print("RSSI: "+String(RSSI_dBm)+" dBm"); // print connected SSID
+            lcd.setCursor(0,1); // row 0, column 0
+            lcd.print(get_rssi_state(RSSI_dBm)); // print connected SSID
+          }
+        }
+        else{
+          if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
+            display_uptime_top_row();
+            lcd.setCursor(0,1); // row 0, column 0
+            lcd.print(String(busvoltage)+"V I:"+String(current_mA)+"mA");
+          }
+        }    
+    } // close else for espnow display
     rgb_LED_Off();      
 }
 
 BLYNK_CONNECTED() {
   blueOn();
-  if(GROVE_LCD_AVAILABLE){
+  if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
     lcd.clear();
     lcd.setCursor(0,0); // row 0, column 0
     lcd.print("Blynk Connected!"); // print connected SSID
@@ -1583,7 +1792,7 @@ BLYNK_DISCONNECTED() {
     writeStringToEEPROM(disconnectTS__Address, disconnected_ts);
   
     Serial.println("[ESP32_AASAS_UiTM_WiFi_IoT] Blynk Disconnected");
-    if(GROVE_LCD_AVAILABLE){
+    if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
       lcd.clear();
       lcd.setCursor(0,0); // row 0, column 0
       lcd.print("Blynk Disconnected"); // print connected SSID
@@ -1601,7 +1810,7 @@ BLYNK_DISCONNECTED() {
 }
 
 BLYNK_RESTART(){
-  if(GROVE_LCD_AVAILABLE){
+  if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
     lcd.clear();
     lcd.setCursor(0,0); // row 0, column 0
     lcd.print("-Blynk Restart!-"); // print connected SSID
@@ -1623,7 +1832,7 @@ BLYNK_ELAPSE_OUT(char state, int val){
  r = reconnect wifi
  w = wait to restart
 */
-  if(GROVE_LCD_AVAILABLE){
+  if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
     lcd.clear();
     lcd.setCursor(0,0); // row 0, column 0
     if(state == 'c') 
@@ -1677,6 +1886,9 @@ BLYNK_WRITE(V26){
   int val = param.asInt();
   if(val) onRelay3();
   else    offRelay3();
+
+  if(val) displayESPNOW = true;
+  else    displayESPNOW = false;
 }
 
 BLYNK_WRITE(V27){
