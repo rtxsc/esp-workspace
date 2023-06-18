@@ -5,7 +5,7 @@ Edited 28 Dec 2022
 Subscribed to Blynk Plus RM30.90/month on Monday 13 Feb 2023
 Connected and Disconnected logic furnished 15 Feb 2023
 
-solving MD5 flash issue Sunday 18 June 2023
+solving MD5 flash issue Sunday 18 June 2023 at TBS
 python3 -m esptool --chip esp32 write_flash_status --non-volatile 0
 python3 -m esptool --chip esp32 erase_flash 
 */
