@@ -4,6 +4,10 @@ Works with ESP32S2
 Edited 28 Dec 2022
 Subscribed to Blynk Plus RM30.90/month on Monday 13 Feb 2023
 Connected and Disconnected logic furnished 15 Feb 2023
+
+solving MD5 flash issue Sunday 18 June 2023
+python3 -m esptool --chip esp32 write_flash_status --non-volatile 0
+python3 -m esptool --chip esp32 erase_flash 
 */
 // #define ESP32S2_1
 // #define ESP32S2_2
@@ -15,8 +19,8 @@ Connected and Disconnected logic furnished 15 Feb 2023
 // #define ESP32DEV_1
 // #define ESP32DEV_2
 // #define ESP32DEV_3
-// #define ESP32DEV_4
-#define ESP32DEV_5
+#define ESP32DEV_4
+// #define ESP32DEV_5
 
 // #define LOCATION_MKE2_UiTM_WiFi_IoT // comment this line for TBS deployment
 // #define LOCATION_MKE2_MaxisONE // comment this line for TBS deployment
@@ -63,6 +67,7 @@ Connected and Disconnected logic furnished 15 Feb 2023
 #include <Wire.h>
 #include<ADS1115_WE.h> 
 #include "rgb_lcd.h"
+#include <LiquidCrystal_I2C.h>
 
 #include <WiFi.h>
 #include <WiFiClient.h>
@@ -292,7 +297,7 @@ char auth[] = BLYNK_AUTH_TOKEN;
   char ssid[] = "MaxisONE Fibre 2.4G";
   char pass[] = "respironics"; // leave this empty as this is an open network
 #else
-  char ssid[] = "MaxisONE Fibre 2.4G";
+  char ssid[] = "MaxisONE Fibre 2.4G"; // TP-link extender / DEV-4 doesnt need EXT
   char pass[] = "respironics"; // leave this empty as this is an open network
 #endif
 
@@ -302,7 +307,7 @@ char auth[] = BLYNK_AUTH_TOKEN;
 // char ssid[] = "Maxis Postpaid 128";
 // char pass[] = "respironics"; // leave this empty as this is an open network
 
-#ifdef ESP32C3_4
+#ifdef ESP32C3_4 || defined (ESP32C3_6) || defined (ESP32C3_8)
   #define I2C_SDA                 8 
   #define I2C_SCL                 9
 #elif defined ESP32DEV_1 || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5)   
@@ -323,10 +328,14 @@ NTPClient           timeClient(ntpUDP);
 BlynkTimer          timer;
 Adafruit_NeoPixel   pixels(NUMPIXELS, RGB);
 Adafruit_INA219     ina219_A;
-rgb_lcd             lcd;
 ADS1115_WE          adc = ADS1115_WE(ADS_I2C_ADDRESS);
 DS1307              _clock;
-
+// comment either one of this
+#ifdef ESP32DEV_4
+  LiquidCrystal_I2C   lcd(0x27,16,2);  // set the LCD address to 0x27 for a 16 chars and 2 line display
+#else
+  rgb_lcd             lcd;
+#endif
 // Variables to save date and time
 String formattedDate;
 String dayStamp;
@@ -427,7 +436,7 @@ void clear_disconnCounter();
 void try_wifi_connect(int timeout);
 
 void onRelay1();
-void onRelay2();
+void onRelay2(); // borrow this function to turn on/off i2c LCD LED backlight 
 void onRelay3();
 void offRelay1();
 void offRelay2();
@@ -486,8 +495,10 @@ void setup()
   if(strcmp(mac_addr,"C8:2B:96:B9:A9:58")==0) esp_model = "ESP32DEV-1";
   if(strcmp(mac_addr,"9C:9C:1F:E3:85:3C")==0) esp_model = "ESP32DEV-2";
   if(strcmp(mac_addr,"84:CC:A8:5E:6E:E8")==0) esp_model = "ESP32DEV-3";
-  if(strcmp(mac_addr,"9C:9C:1F:C5:94:24")==0) esp_model = "ESP32DEV-4";
+  // 7C:9E:BD:07:A8:E4 (Dev-4 with broken usb port)
+  if(strcmp(mac_addr,"7C:9E:BD:07:A8:E4")==0) esp_model = "ESP32DEV-4"; // 9C:9C:1F:C5:94:24 who is this?
   if(strcmp(mac_addr,"84:0D:8E:E2:D6:D8")==0) esp_model = "ESP32DEV-5";
+  
 
 
   Serial.printf("[setup] %s Found!\n",esp_model);
@@ -508,7 +519,12 @@ void setup()
     initINA219();
   }
   if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
-    lcd.begin(16, 2);
+    if(I2C_LCD_AVAILABLE){
+      lcd.init();                      
+      lcd.backlight();
+    }else{
+      lcd.begin(16, 2); // GROVE_LCD_AVAILABLE
+    }
     lcd.createChar(1, wave_right); // create block character
     lcd.createChar(2, wave_left); // create block character
     lcd.createChar(3, right_arrow); // create block character
@@ -1085,7 +1101,7 @@ void try_wifi_connect(int timeout){
       lcd.setCursor(0,0);
       lcd.print("-WiFi Connected-");
       lcd.setCursor(0,1);
-      lcd.print("--UiTM WiFi IoT-");
+      lcd.print(ssid);
       delay(1000);
       // vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
@@ -1205,9 +1221,13 @@ void offRelay1(){
 }
 void onRelay2(){
   digitalWrite(IN2,1);
+  if(I2C_LCD_AVAILABLE)
+    lcd.backlight();
 }
 void offRelay2(){
   digitalWrite(IN2,0);
+  if(I2C_LCD_AVAILABLE)
+    lcd.noBacklight();
 }
 void onRelay3(){
   digitalWrite(IN3,1);

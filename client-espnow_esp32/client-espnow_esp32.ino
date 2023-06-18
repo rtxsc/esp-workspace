@@ -54,7 +54,7 @@ bool send_success = false;
   const char WIFI_SSID[] = "MaxisONE Fibre 2.4G";
   uint8_t serverAddress[] = {0x7C, 0xDF, 0xA1, 0x00, 0xBA, 0x9E}; // ESP32S2-3
 #else
-  const char WIFI_SSID[] = "MaxisONE Fibre 2.4G";
+  const char WIFI_SSID[] = "MaxisONE Fibre 2.4G_EXT";
   uint8_t serverAddress[] = {0x84, 0x0D, 0x8E, 0xE2, 0xD6, 0xD8}; // ESP32DEV_5 (TBS) 
 #endif
 
