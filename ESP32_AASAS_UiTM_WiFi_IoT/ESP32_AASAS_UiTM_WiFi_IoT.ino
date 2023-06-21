@@ -11,12 +11,12 @@ python3 -m esptool --chip esp32 erase_flash
 */
 // #define ESP32S2_1  // M01
 // #define ESP32S2_2  // M02
-// #define ESP32S2_3  // M03
+#define ESP32S2_3  // M03
 // #define ESP32S2_4  // M04
 // #define ESP32S2_5  // M05
 // #define ESP32S2_6  // M06
-#define ESP32DEV_1 // M07
-// #define ESP32DEV_2 // M08
+// #define ESP32DEV_1 // M07
+// #define ESP32DEV_2 // M08 @ water level sensing
 // #define ESP32DEV_3
 // #define ESP32DEV_4 // M09 missing usb port @ TBS front gate
 // #define ESP32DEV_5 // M10
@@ -38,7 +38,7 @@ RTC_DATA_ATTR int bootCount = 0;
 
 // #define REGULAR_I2C_LCD // comment if using GROVE_LCD
 
-// #define LOCATION_MKE2_UiTM_WiFi_IoT // comment this line for TBS deployment
+#define LOCATION_MKE2_UiTM_WiFi_IoT // comment this line for TBS deployment
 // #define LOCATION_MKE2_MaxisONE // comment this line for TBS deployment
 
 /* Comment this out to disable prints and save space */
@@ -314,7 +314,7 @@ char auth[] = BLYNK_AUTH_TOKEN;
   char ssid[] = "UiTM WiFi IoT";
   char pass[] = ""; // leave this empty as this is an open network
 #elif defined LOCATION_MKE2_MaxisONE
-  char ssid[] = "MaxisONE Fibre 2.4G";
+  char ssid[] = "MaxisONE Fibre 2.4G_EXT";
   char pass[] = "respironics"; // leave this empty as this is an open network
 #else
   char ssid[] = "MaxisONE Fibre 2.4G_EXT"; // TP-link extender / DEV-4 doesnt need EXT
@@ -487,10 +487,6 @@ String esp_model = "UNKNOWN ESP";
 
 void setup()
 {
-  ssidstr = String(ssid);
-  if(ssidstr.length() > 16)
-    ssidstr.remove(0,16-ssidstr.length());
-
   Serial.begin(115200);
   #if defined (ESP32DEV_1) || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5) || defined (ESP32DEV_6)      
     Wire.begin();
@@ -565,7 +561,6 @@ void setup()
     lcd.begin(16, 2); // GROVE_LCD_AVAILABLE
   #endif
 
-
   if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
     lcd.createChar(1, wave_right); // create block character
     lcd.createChar(2, wave_left); // create block character
@@ -630,6 +625,10 @@ void setup()
   // Serial.print("ESP32 hostname after changing hostname: ");
   Serial.print("ESP32 hostname after calling setting WiFi_STA: ");
   Serial.println(default_hostname);   /*New Hostname printed*/ 
+
+  ssidstr = String(ssid);
+  if(ssidstr.length() > 16)
+    ssidstr.remove(0,ssidstr.length()-16); // logic corrected at MKE2 18:58 Wed 21 June
 
   if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
     try_wifi_connect(10); // pre-connection using WiFi.begin() with 10 second default timeout
@@ -1027,7 +1026,7 @@ void BLYNK_HandlerTask(void * pvParameters)
 {
 
   timer.setInterval(1000L, BLYNK_TASK);
-  timer.setInterval(1000L, get_weather);
+  // timer.setInterval(1000L, get_weather);
 
   Serial.print("BLYNK_HandlerTask running on core ");
   Serial.println(xPortGetCoreID());
@@ -1049,7 +1048,8 @@ void try_wifi_connect(int timeout){
 
     int wl_count = 0;
     int connect_elapse = timeout; // timeout in second unit 
-    Serial.printf("\n\nConnecting to %s\n\n", ssid);
+
+    Serial.printf("\n\nConnecting to %s\n\n", ssidstr);
     if(strcmp(pass,"")==0){
       Serial.println("This is an open network!");
       openNetwork = true;
@@ -1089,7 +1089,7 @@ void try_wifi_connect(int timeout){
                 lcd.setCursor(0, 0); // row 1, column 0
                 lcd.print("Conn Retry:" +String(wifiRetryCount));  
                 lcd.setCursor(0, 1); // row 1, column 0
-                lcd.print(default_hostname);
+                lcd.print(ssidstr); // default_hostname
                 delay(1000);
                 off_onboard_led();
 
@@ -1105,7 +1105,7 @@ void try_wifi_connect(int timeout){
             }
             else{
                 lcd.setCursor(0, 0); // row 1, column 0
-                lcd.print(ssid);
+                lcd.print(ssidstr);
                 on_onboard_led();
             }
           }
@@ -1139,16 +1139,13 @@ void try_wifi_connect(int timeout){
       Serial.println("Syncing RTC via NTP complete. RTC is now up-to-date!");
       delay(2000);
     }
-    int strlen = ssidstr.length()+1;
-    char ssidchar[strlen];
-    ssidstr.toCharArray(ssidchar,strlen); 
-   
+  
     if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("-WiFi Connected-");
       lcd.setCursor(0,1);
-      lcd.print(ssid);
+      lcd.print(ssidstr);
       delay(1000);
       // vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
@@ -1812,9 +1809,14 @@ void BLYNK_TASK(){
     Blynk.virtualWrite(V10, tempC);
     Blynk.virtualWrite(V11, humid);
     // Blynk.virtualWrite(V12, jsonWeather); // disabled temporarily
-    Blynk.virtualWrite(V12, "C3-8 = " + jsonString8); // this should be C8 at TBS (need to commit DEV_5 as well for the change)
-    Blynk.virtualWrite(V15, "C3-6 = " + jsonString6); // taking over disconnected ts
-
+    #ifdef ESP32DEV_5
+      Blynk.virtualWrite(V12, "C3-8 = " + jsonString8); // this should be C8 at TBS (need to commit DEV_5 as well for the change)
+      Blynk.virtualWrite(V15, "C3-6 = " + jsonString6); // taking over disconnected ts
+    #elif defined ESP32S2_3
+      Blynk.virtualWrite(V12, "C3-4 = " + jsonString4); // 
+      Blynk.virtualWrite(V15, "C3-7 = " + jsonString7); //
+    #else
+    #endif    
     Blynk.virtualWrite(V34, get_ambient_temp());
 
     if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE)
@@ -2084,8 +2086,10 @@ float get_water_level_cm() {
   // Return the wave propagation time (in µs)
   ultrason_duration = pulseIn(echo_pin, HIGH);
 
-//distance calculation
+  //distance calculation
   distance_cm = ultrason_duration * SOUND_SPEED/2 * 0.0001;
+  if(distance_cm < 40) distance_cm = 40;
+  if(distance_cm > 90) distance_cm = 90;  
   waterLvlPercent = map(distance_cm,90,40,0,100);  
 
   // We print the distance on the serial port
