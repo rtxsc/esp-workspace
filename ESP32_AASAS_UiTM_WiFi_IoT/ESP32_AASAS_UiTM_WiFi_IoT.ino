@@ -23,6 +23,53 @@ python3 -m esptool --chip esp32 erase_flash
 // #define ESP32DEV_6 // acting as M01 alongside ESP32S2_1
 // #define ESP32C3_4
 
+/*
+V1 dateTime
+V2 WiFi.localIP().toString()
+V3 restart_ts & deep sleep info
+V4 RSSI_dBm
+V5 restartCounter
+V6 busvoltage
+V7 current_mA
+V8 ssid
+V9 get_rssi_state(RSSI_dBm)
+V10 tempC
+V11 humid
+V12 json weather & jsonstring espnow
+V13 not use
+V14 not use
+V15 disconn_ts_str & jsonstring espnow
+V16 disconnection_count
+V17 blynk_on_connected_ts
+V18 ads_readout & water level
+V19 wifiRetryCount
+V20 BLYNK_WRITE R
+V21 BLYNK_WRITE G
+V22 BLYNK_WRITE B
+V23 BLYNK_WRITE Clear RC
+V24 BLYNK_WRITE Relay 1
+V25 BLYNK_WRITE Relay 2
+V26 BLYNK_WRITE Relay 3
+V27 BLYNK_WRITE clear_disconnCounter
+V28 BLYNK_WRITE clearWiFiRetry + espnow on/off
+V29 default_hostname
+
+V30 not use (going to be get_ambient_temp) GAUGE
+V31 not use waterlevel GAUGE
+V32 not use espnow c3-4 volt GAUGE
+V33 not use espnow c3-7 volt GAUGE
+V34 get_ambient_temp ----> espnow c3-4 amp GAUGE
+V35 not use espnow c3-7 amp GAUGE
+V36 not use espnow c3-4 moisture GAUGE
+V37 not use espnow c3-7 moisture GAUGE
+V38 not use espnow c3-4 soil temp GAUGE
+V39 not use espnow c3-7 soil temp GAUGE
+
+V40 Button LED Backlight
+V41 Button Deep Sleep
+V42 Button Display espnow
+*/
+
 bool deep_sleep_activated = false;
 // deep sleep config
 #define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
@@ -439,6 +486,7 @@ BLYNK_WRITE(V23);
 BLYNK_WRITE(V24);
 BLYNK_WRITE(V25);
 BLYNK_WRITE(V26);
+BLYNK_WRITE(V27);
 
 void BLYNK_TASK();
 void i2c_scan();
@@ -1817,7 +1865,7 @@ void BLYNK_TASK(){
       Blynk.virtualWrite(V15, "C3-7 = " + jsonString7); //
     #else
     #endif    
-    Blynk.virtualWrite(V34, get_ambient_temp());
+    Blynk.virtualWrite(V34, get_ambient_temp()); // gonna change this to V30 - 21/6/2023
 
     if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE)
       lcd.clear();
