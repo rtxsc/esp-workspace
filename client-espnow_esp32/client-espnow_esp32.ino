@@ -3,7 +3,7 @@
 #include <WiFi.h>
 #include <Adafruit_INA219.h>
 
-// #define LOCATION_MKE2_UiTM_WiFi_IoT // comment this line for TBS deployment
+#define LOCATION_MKE2_UiTM_WiFi_IoT // comment this line for TBS deployment
 // #define LOCATION_MKE2_MaxisONE // comment this line for TBS deployment
 
 Adafruit_INA219     ina219_A;
@@ -22,13 +22,13 @@ String current_mA_str;
 
 /*
 ESP32C3-6 & ESP32C3-8 at TBS linking with DEV_5 (AASAS M10)
-ESP32C3-4 & ESP32C3-7 at TBS linking with S2_3 (AASAS M03)
+ESP32C3-4 & ESP32C3-7 at MKE2 linking with S2_3 (AASAS M03)
 ESP32C3-3 is currently a work in progress (container & booster upgrade)
 */
 
 // Set your Board ID (ESP32 Sender #1 = BOARD_ID 1, ESP32 Sender #2 = BOARD_ID 2, etc)
 #ifdef ESP32C3
-  #define BOARD_ID    "ESP32C3-6" // enter model name here ESPC3-3 / -4 / -5 / -6 / -7 / -8 
+  #define BOARD_ID    "ESP32C3-4" // enter model name here ESPC3-3 / -4 / -5 / -6 / -7 / -8 
   #define LED         19    // 19 if ESP32-C3
   #define RED         0x03 // 0x03 if ESP32-C3
   #define GRN         0x04 // 0x04 if ESP32-C3
@@ -205,8 +205,8 @@ for(int i=0;i<3;i++){
   Serial.print("MAC (String):");
   Serial.println(mac_str);
   Serial.printf("MAC (const char): %s\n", mac_addr);
-  WiFi.disconnect();
-  WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
+  // WiFi.disconnect();
+  // WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
 
   // Set device as a Wi-Fi Station and set channel
   WiFi.mode(WIFI_STA); // WIFI_AP WIFI_AP_STA WIFI_STA

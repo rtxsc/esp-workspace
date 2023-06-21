@@ -36,12 +36,22 @@ C8:2B:96:B9:A9:58
 84:CC:A8:5E:6E:E8
 
 # ESP32DEV-4
-9c:9c:1f:c5:94:24
-9C:9C:1F:C5:94:24
+7C:9E:BD:07:A8:E4 (broken USB at TBS as AASAS M09)
 
 # ESP32DEV-5 (currently at TBS as AASAS M10)
 84:0D:8E:E2:D6:D8
 
+# ESP32DEV-6 (newly added MKE2)
+9C:9C:1F:C5:94:24
+
+# ESP32DEV-7 (newly added MKE2)
+C8:2B:96:BA:90:84
+
+# ESP32DEV-8 (newly added MKE2 @ AASAS NFT_1)
+4C:11:AE:D7:9E:D0
+
+# ESP32DEV-9 (newly added MKE2 @ faulty CH340 chip - need to use serial)
+C8:2B:96:B5:A0:C8
 
 ###### ESP32-C3 #################################
 # ESP32C3-1 

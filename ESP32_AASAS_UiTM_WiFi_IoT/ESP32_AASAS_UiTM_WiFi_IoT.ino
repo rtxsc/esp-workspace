@@ -9,18 +9,34 @@ solving MD5 flash issue Sunday 18 June 2023 at TBS
 python3 -m esptool --chip esp32 write_flash_status --non-volatile 0
 python3 -m esptool --chip esp32 erase_flash 
 */
-// #define ESP32S2_1
-// #define ESP32S2_2
-// #define ESP32S2_3
-// #define ESP32S2_4
-// #define ESP32S2_5
-// #define ESP32S2_6
-// #define ESP32C3_4
-// #define ESP32DEV_1
-// #define ESP32DEV_2
+// #define ESP32S2_1  // M01
+// #define ESP32S2_2  // M02
+// #define ESP32S2_3  // M03
+// #define ESP32S2_4  // M04
+// #define ESP32S2_5  // M05
+// #define ESP32S2_6  // M06
+#define ESP32DEV_1 // M07
+// #define ESP32DEV_2 // M08
 // #define ESP32DEV_3
-#define ESP32DEV_4
-// #define ESP32DEV_5
+// #define ESP32DEV_4 // M09 missing usb port @ TBS front gate
+// #define ESP32DEV_5 // M10
+// #define ESP32DEV_6 // acting as M01 alongside ESP32S2_1
+// #define ESP32C3_4
+
+bool deep_sleep_activated = false;
+// deep sleep config
+#define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
+#define SLEEP_HOUR     14
+#define TIME_TO_SLEEP  SLEEP_HOUR*3600       /* Time ESP32 will go to sleep (in seconds) 50400 */
+int setSleepHour = 18;
+int setSleepMin = 0;
+uint8_t etaHour = 0;
+uint8_t etaMin = 0;
+uint8_t etaSec = 0;
+String etaDS = "HH:MM:SS";
+RTC_DATA_ATTR int bootCount = 0;
+
+// #define REGULAR_I2C_LCD // comment if using GROVE_LCD
 
 // #define LOCATION_MKE2_UiTM_WiFi_IoT // comment this line for TBS deployment
 // #define LOCATION_MKE2_MaxisONE // comment this line for TBS deployment
@@ -30,7 +46,7 @@ python3 -m esptool --chip esp32 erase_flash
 #define BLYNK_TEMPLATE_ID   "TMPLjsD8y_SC" // template ID for M04 and M05 then subcribing to Plus RM30.90 13Feb2023
 #define BLYNK_TEMPLATE_NAME "AASAS UiTM WiFi IoT"
 
-#ifdef ESP32S2_1
+#if defined ESP32S2_1 || defined ESP32DEV_6
   #define BLYNK_DEVICE_NAME "AASAS M01"
   #define BLYNK_AUTH_TOKEN "J3DXwnJNxoCIUI3TF7ULHmCKdDg27FV4"
 #elif defined ESP32S2_2
@@ -152,6 +168,7 @@ typedef struct struct_control {
 //Create a struct_message called sendControl
 struct_control sendControl;
 JSONVar     board;
+
 bool esp_now_initialized = false;
 #define CORE_0      0x00
 #define CORE_1      0x01
@@ -238,7 +255,7 @@ uint16_t prev_read_id8 = 0;
 #define NUMPIXELS   1 
 #define DELAYVAL    100 
 
-#if defined (ESP32DEV_1) || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5)   
+#if defined (ESP32DEV_1) || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5) || defined (ESP32DEV_6)     
   #define IN1         GROVE_D2
   #define IN2         GROVE_D3
   #define IN3         GROVE_D4
@@ -248,6 +265,7 @@ uint16_t prev_read_id8 = 0;
   byte                i = 0; // CHAINABLE LED ARRAY
   const int trig_pin = GROVE_D6; // D7 default
   const int echo_pin = GROVE_D7; // D6 default
+  #define BLINKER     GROVE_D13
 #else
   #define IN1         19
   #define IN2         20
@@ -258,6 +276,8 @@ uint16_t prev_read_id8 = 0;
   byte                i = 0; // CHAINABLE LED ARRAY
   const int trig_pin = 33; // Dummy 33 on ESP32S2
   const int echo_pin = 34; // Dummy 34 on ESP32S2
+  #define BLINKER     37 // Dummy
+
 #endif
 
 #ifdef ESP32C3
@@ -281,7 +301,7 @@ int waterLvlPercent;
 
 const int B = 4275;               // B value of the thermistor
 const int R0 = 100000;            // R0 = 100k
-#if defined (ESP32DEV_1) || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5)   
+#if defined (ESP32DEV_1) || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5) || defined (ESP32DEV_6)       
 const int pinTempSensor = GROVE_A3;
 #else
 const int pinTempSensor = 1;     // Grove - Temperature Sensor connect to IO0
@@ -297,10 +317,11 @@ char auth[] = BLYNK_AUTH_TOKEN;
   char ssid[] = "MaxisONE Fibre 2.4G";
   char pass[] = "respironics"; // leave this empty as this is an open network
 #else
-  char ssid[] = "MaxisONE Fibre 2.4G"; // TP-link extender / DEV-4 doesnt need EXT
+  char ssid[] = "MaxisONE Fibre 2.4G_EXT"; // TP-link extender / DEV-4 doesnt need EXT
   char pass[] = "respironics"; // leave this empty as this is an open network
 #endif
 
+String ssidstr = "None";
 // char ssid[] = "Robotronix MKE2";
 // char pass[] = "robotronix"; // leave this empty as this is an open network
 
@@ -310,7 +331,7 @@ char auth[] = BLYNK_AUTH_TOKEN;
 #ifdef ESP32C3_4 || defined (ESP32C3_6) || defined (ESP32C3_8)
   #define I2C_SDA                 8 
   #define I2C_SCL                 9
-#elif defined ESP32DEV_1 || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5)   
+#elif defined ESP32DEV_1 || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5) || defined (ESP32DEV_6)      
   // use default i2c pinoutx2
 #else
   #define I2C_SDA                 41 
@@ -331,11 +352,12 @@ Adafruit_INA219     ina219_A;
 ADS1115_WE          adc = ADS1115_WE(ADS_I2C_ADDRESS);
 DS1307              _clock;
 // comment either one of this
-#ifdef ESP32DEV_4
+#ifdef REGULAR_I2C_LCD
   LiquidCrystal_I2C   lcd(0x27,16,2);  // set the LCD address to 0x27 for a 16 chars and 2 line display
 #else
   rgb_lcd             lcd;
 #endif
+
 // Variables to save date and time
 String formattedDate;
 String dayStamp;
@@ -465,8 +487,12 @@ String esp_model = "UNKNOWN ESP";
 
 void setup()
 {
+  ssidstr = String(ssid);
+  if(ssidstr.length() > 16)
+    ssidstr.remove(0,16-ssidstr.length());
+
   Serial.begin(115200);
-  #if defined (ESP32DEV_1) || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5)   
+  #if defined (ESP32DEV_1) || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5) || defined (ESP32DEV_6)      
     Wire.begin();
   #else
     Wire.begin(I2C_SDA, I2C_SCL);
@@ -476,6 +502,19 @@ void setup()
   Serial.print("MAC (String):");
   Serial.println(mac_str);
   Serial.printf("MAC (const char): %s\n", mac_addr);
+
+  //Increment boot number and print it every reboot
+  ++bootCount;
+  Serial.println("Boot number: " + String(bootCount));
+  //Print the wakeup reason for ESP32
+  print_wakeup_reason();
+
+  Serial.print("\n\n **************DEEP SLEEP CONFIG********************* \n");
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  Serial.println("Setup ESP32 to sleep for every " + String(TIME_TO_SLEEP) +
+  " Seconds or " + String(SLEEP_HOUR) + " Hours");
+  Serial.println("Start Deep Sleep at " + String(setSleepHour) + ":" + String(setSleepMin));
+  Serial.print("\n ****************************************************** \n\n");
 
   if(strcmp(mac_addr,"7C:DF:A1:AF:AA:B4")==0) esp_model = "ESP32C3-1";
   if(strcmp(mac_addr,"7C:DF:A1:AF:AC:FC")==0) esp_model = "ESP32C3-2";
@@ -498,7 +537,7 @@ void setup()
   // 7C:9E:BD:07:A8:E4 (Dev-4 with broken usb port)
   if(strcmp(mac_addr,"7C:9E:BD:07:A8:E4")==0) esp_model = "ESP32DEV-4"; // 9C:9C:1F:C5:94:24 who is this?
   if(strcmp(mac_addr,"84:0D:8E:E2:D6:D8")==0) esp_model = "ESP32DEV-5";
-  
+  if(strcmp(mac_addr,"9C:9C:1F:C5:94:24")==0) esp_model = "ESP32DEV-6"; // added 19 Jun 2023
 
 
   Serial.printf("[setup] %s Found!\n",esp_model);
@@ -508,7 +547,7 @@ void setup()
   Serial.println("\nScanning ESP32s2 i2c port...");
   i2c_scan(); // this method discovered to be failed after the latest ESP32 core update 24.02.2023 (Friday)
   Serial.println("\nReinit i2c port");
-  #if defined (ESP32DEV_1) || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5)   
+  #if defined (ESP32DEV_1) || defined (ESP32DEV_2) || defined (ESP32DEV_3) || defined (ESP32DEV_4) || defined (ESP32DEV_5) || defined (ESP32DEV_6)        
     Wire.begin();
   #else
     Wire.begin(I2C_SDA, I2C_SCL);
@@ -518,13 +557,16 @@ void setup()
   if(INA219_AVAILABLE){
     initINA219();
   }
+
+  #ifdef REGULAR_I2C_LCD
+    lcd.init();                      
+    lcd.backlight();
+  #else
+    lcd.begin(16, 2); // GROVE_LCD_AVAILABLE
+  #endif
+
+
   if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
-    if(I2C_LCD_AVAILABLE){
-      lcd.init();                      
-      lcd.backlight();
-    }else{
-      lcd.begin(16, 2); // GROVE_LCD_AVAILABLE
-    }
     lcd.createChar(1, wave_right); // create block character
     lcd.createChar(2, wave_left); // create block character
     lcd.createChar(3, right_arrow); // create block character
@@ -567,6 +609,7 @@ void setup()
   pinMode(LED_BLUE, OUTPUT);
   pinMode(trig_pin, OUTPUT); // We configure the trig as output
   pinMode(echo_pin, INPUT); // We configure the echo as input
+  pinMode(BLINKER,OUTPUT); // blinker at solar panel
 
   #ifdef ESP32C3
     pinMode(R,OUTPUT);
@@ -616,6 +659,7 @@ void setup()
   timeClient.begin();
   timeClient.setTimeOffset(28800);
   restart_ts = get_timestamp(); // must be called after timeClient.begin() for the restart timestamp
+  restart_ts = get_timestamp(); // second call to reconfirm
 
   byte setH=0,setM=0,setS=0;
   short int setYear=2023; 
@@ -1061,7 +1105,7 @@ void try_wifi_connect(int timeout){
             }
             else{
                 lcd.setCursor(0, 0); // row 1, column 0
-                lcd.print(String(ssid));
+                lcd.print(ssid);
                 on_onboard_led();
             }
           }
@@ -1095,6 +1139,9 @@ void try_wifi_connect(int timeout){
       Serial.println("Syncing RTC via NTP complete. RTC is now up-to-date!");
       delay(2000);
     }
+    int strlen = ssidstr.length()+1;
+    char ssidchar[strlen];
+    ssidstr.toCharArray(ssidchar,strlen); 
    
     if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
       lcd.clear();
@@ -1169,14 +1216,61 @@ String get_timestamp(){
   timeClient.update();
   // https://github.com/taranais/NTPClient.git
   formattedDate   = timeClient.getFormattedDate(); 
+  int currentHour = timeClient.getHours();
+  int currentMin = timeClient.getMinutes();
+  int currentsec = timeClient.getSeconds();
   int splitT      = formattedDate.indexOf("T");
   dayStamp        = formattedDate.substring(5, splitT);
   String dateTime = timeClient.getFormattedTime() + " " + dayStamp;
+
+  bool pushAlready = false;
+
+  if(deep_sleep_activated){
+    pushAlready = false; // reset this logic
+    etaHour = setSleepHour - currentHour;
+    etaMin = 60 - currentMin;
+    etaSec = 60 - currentsec;
+
+    etaDS = String(etaHour)+":"+String(etaMin)+":"+String(etaSec);  
+    Blynk.virtualWrite(V3, "DS starts in T-"+ etaDS);
+    if((currentHour >= setSleepHour && currentMin >= setSleepMin) || (currentHour >= 0 && currentHour < 7)){
+      Serial.println("Going to sleep now. Pushing Deep Sleep Timestamp of " + dateTime);
+      int onlineHour = currentHour + SLEEP_HOUR - 24; // calc reconnection time
+      Serial.println("Will be back online at " + String(onlineHour) + ":" + String(currentMin));
+      Blynk.virtualWrite(V3, "DS started at "+ dateTime);
+      Serial.flush(); 
+      lcd.clear();
+      lcd.setCursor(0, 0); // row 0, column 0
+      lcd.print("-Back Online at:");
+      lcd.setCursor(0, 1); // row 0, column 0
+      String onHour, onMin;
+      if(onlineHour < 10)
+        onHour = "0"+String(onlineHour);
+      if(currentMin < 10)
+        onMin = "0"+String(currentMin);
+      lcd.print(onHour+ ":" + onMin + " V:" + String(busvoltage));
+      delay(1000);
+      #ifdef REGULAR_I2C_LCD
+        lcd.noBacklight();
+      #else
+        offRelay2();
+      #endif
+      leds.setColorRGB(i, 0, 0, 0); // turn off RGB
+      delay(1000);
+      esp_deep_sleep_start(); // go to sleep and wake up when timer timeout
+    }
+  }else{
+    if(!pushAlready){
+      Blynk.virtualWrite(V3, restart_ts); 
+      pushAlready = true;
+    }
+  }
   return dateTime;
 }
 
 
 void off_onboard_led(){
+  digitalWrite(BLINKER,0);
    #ifdef ESP32C3
       digitalWrite(ONBOARD_LED, LOW); // LOW    = OFF LED on ESP32 Dev and C3
    #else
@@ -1185,6 +1279,7 @@ void off_onboard_led(){
 }
 
 void on_onboard_led(){
+  digitalWrite(BLINKER,1);
   #ifdef ESP32C3
     digitalWrite(ONBOARD_LED, HIGH); // HIGH  = ON LED on ESP32 Dev and C3
   #else
@@ -1221,13 +1316,15 @@ void offRelay1(){
 }
 void onRelay2(){
   digitalWrite(IN2,1);
-  if(I2C_LCD_AVAILABLE)
+  #ifdef REGULAR_I2C_LCD
     lcd.backlight();
+  #endif
 }
 void offRelay2(){
   digitalWrite(IN2,0);
-  if(I2C_LCD_AVAILABLE)
+  #ifdef REGULAR_I2C_LCD
     lcd.noBacklight();
+  #endif
 }
 void onRelay3(){
   digitalWrite(IN3,1);
@@ -1367,7 +1464,7 @@ void clear_wifiRetryCounter(){
       lcd.setCursor(0,0);
       lcd.print("Reset WiFi Retry!");
       lcd.setCursor(0,1);
-      lcd.print("-Restarting Now-");
+      lcd.print("Retry Count Reset");
     }
     Serial.println("@@@@@@@@@@@@@@@@@@ CLEARING WiFi Retry Counter @@@@@@@@@@@@@@@@@@ ");
     write16bitIntoEEPROM(wifiConnRetryAddress,0);
@@ -1724,20 +1821,30 @@ void BLYNK_TASK(){
       lcd.clear();
 
     if(displayESPNOW){
-        #if defined LOCATION_MKE2_MaxisONE || defined (LOCATION_MKE2_UiTM_WiFi_IoT)
-          lcd.setCursor(0,0); // MKE2 
-          lcd.print("C3-4 #"+String(read_id4)+" V:" + String(volt4)); // print connected SSID
-          lcd.setCursor(0,1);
-          lcd.print("C3-7 #"+String(read_id7)+" V:" + String(volt7)); // print connected SSID
-        #else
-          lcd.setCursor(0,0); // TBS
-          lcd.print("C3-3 #"+String(read_id3)+" V:" + String(volt3)); // print connected SSID
-          lcd.setCursor(0,1);
-          lcd.print("C3-8 #"+String(read_id8)+" V:" + String(volt8)); // print connected SSID
-        #endif
+        if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
+          #if defined LOCATION_MKE2_MaxisONE || defined (LOCATION_MKE2_UiTM_WiFi_IoT)
+            lcd.setCursor(0,0); // MKE2 
+            lcd.print("C3-4 #"+String(read_id4)+" V:" + String(volt4)); // print connected SSID
+            lcd.setCursor(0,1);
+            lcd.print("C3-7 #"+String(read_id7)+" V:" + String(volt7)); // print connected SSID
+          #else
+            lcd.setCursor(0,0); // TBS
+            lcd.print("C3-6 #"+String(read_id6)+" V:" + String(volt6)); // print connected SSID
+            lcd.setCursor(0,1); // MKE2
+            lcd.print("C3-8 #"+String(read_id8)+" V:" + String(volt8)); // print connected SSID
+          #endif
+        }
+    }
+    else if(deep_sleep_activated){
+      if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
+        lcd.setCursor(0,0); // row 0, column 0
+        lcd.print("DS ETA: "+ etaDS); // print connected SSID
+        lcd.setCursor(0,1); // row 0, column 0
+        lcd.print(String(busvoltage)+"V I:"+String(current_mA)+"mA");
+      }
     }
     else{
-       if(tick % 2 == 0){
+       if(millis() % 2 == 0){
           if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
             lcd.setCursor(0,0); // row 0, column 0
             lcd.print("----"+ String(BLYNK_DEVICE_NAME)+"---"); // ----AASAS ONE---
@@ -1745,7 +1852,7 @@ void BLYNK_TASK(){
             lcd.print(dateTime);
           }
         }
-        else if(tick % 7 == 0){
+        else if(millis() % 4 == 0){
           if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
             lcd.setCursor(0,0); // row 0, column 0
             lcd.print(esp_model); // print connected SSID
@@ -1753,12 +1860,20 @@ void BLYNK_TASK(){
             lcd.print(mac_str); // print connected SSID
           }
         }
-        else if(tick % 11 == 0){
+        else if(millis() % 6 == 0){
           if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
             lcd.setCursor(0,0); // row 0, column 0
             lcd.print("RSSI: "+String(RSSI_dBm)+" dBm"); // print connected SSID
             lcd.setCursor(0,1); // row 0, column 0
             lcd.print(get_rssi_state(RSSI_dBm)); // print connected SSID
+          }
+        }
+        else if(millis() % 8 == 0){
+          if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
+            lcd.setCursor(0,0); // row 0, column 0
+            lcd.print("DS ETA: "+ etaDS); // print connected SSID
+            lcd.setCursor(0,1); // row 0, column 0
+            lcd.print(String(busvoltage)+"V I:"+String(current_mA)+"mA");
           }
         }
         else{
@@ -1897,18 +2012,20 @@ BLYNK_WRITE(V24){
   else    offRelay1();
 }
 
+// borrow V25 for LED backlight on/off 
 BLYNK_WRITE(V25){
   int val = param.asInt();
   if(val) onRelay2();
   else    offRelay2();
 }
+// borrow V26 for esp_deep_sleep function
 BLYNK_WRITE(V26){
   int val = param.asInt();
   if(val) onRelay3();
   else    offRelay3();
 
-  if(val) displayESPNOW = true;
-  else    displayESPNOW = false;
+  if(val)       deep_sleep_activated = true;
+  else          deep_sleep_activated = false;
 }
 
 BLYNK_WRITE(V27){
@@ -1919,6 +2036,8 @@ BLYNK_WRITE(V27){
 BLYNK_WRITE(V28){
   int pinValue = param.asInt();
   if(pinValue) clear_wifiRetryCounter();
+  if(pinValue) displayESPNOW = true;
+  else         displayESPNOW = false;
 }
 
 
@@ -1967,11 +2086,28 @@ float get_water_level_cm() {
 
 //distance calculation
   distance_cm = ultrason_duration * SOUND_SPEED/2 * 0.0001;
-  waterLvlPercent = map(distance_cm,150,30,0,100);  
+  waterLvlPercent = map(distance_cm,90,40,0,100);  
 
   // We print the distance on the serial port
   // Serial.print("Distance (cm): ");
   // Serial.println(distance_cm);
   return distance_cm;
+}
+
+
+void print_wakeup_reason(){
+  esp_sleep_wakeup_cause_t wakeup_reason;
+
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  switch(wakeup_reason)
+  {
+    case ESP_SLEEP_WAKEUP_EXT0 : Serial.println("Wakeup caused by external signal using RTC_IO"); break;
+    case ESP_SLEEP_WAKEUP_EXT1 : Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
+    case ESP_SLEEP_WAKEUP_TIMER : Serial.println("Wakeup caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD : Serial.println("Wakeup caused by touchpad"); break;
+    case ESP_SLEEP_WAKEUP_ULP : Serial.println("Wakeup caused by ULP program"); break;
+    default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
+  }
 }
 
