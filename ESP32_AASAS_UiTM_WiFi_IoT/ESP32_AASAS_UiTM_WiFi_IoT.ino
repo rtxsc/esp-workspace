@@ -869,7 +869,7 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     prev_read_id2 = read_id2;
   } 
 
-  if(incomingReadings.id == "ESP32C3-3"){
+  if(incomingReadings.id == "ESP32S2m1"){ // condemned changed to ESP32S2m1
     temp3 = incomingReadings.temp;
     humi3 = incomingReadings.humi;
     moist3 = incomingReadings.mois;
@@ -1858,7 +1858,7 @@ void BLYNK_TASK(){
     Blynk.virtualWrite(V11, humid);
     // Blynk.virtualWrite(V12, jsonWeather); // disabled temporarily
     #ifdef ESP32DEV_5
-      Blynk.virtualWrite(V12, "C3-8 = " + jsonString8); // this should be C8 at TBS (need to commit DEV_5 as well for the change)
+      Blynk.virtualWrite(V12, "S2m1 = " + jsonString3); // ESP32S2m1 taking over ESP32C3-3 (condemned)
       Blynk.virtualWrite(V15, "C3-6 = " + jsonString6); // taking over disconnected ts
     #elif defined ESP32S2_3
       Blynk.virtualWrite(V12, "C3-4 = " + jsonString4); // 

@@ -3,7 +3,16 @@
 #include <WiFi.h>
 #include <Adafruit_INA219.h>
 
-#define LOCATION_MKE2_UiTM_WiFi_IoT // comment this line for TBS deployment
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// #define LOCATION_MKE2_UiTM_WiFi_IoT // comment this line for TBS deployment
 // #define LOCATION_MKE2_MaxisONE // comment this line for TBS deployment
 
 Adafruit_INA219     ina219_A;
@@ -11,6 +20,7 @@ Adafruit_INA219     ina219_A;
 bool GROVE_LCD_AVAILABLE = false; // true for debugging purpose 27.02.2023 | change to false 03.03.2023
 bool INA219_AVAILABLE = false;
 bool ADS1115_AVAILABLE = false;
+bool OLED_AVAILABLE = false;
 
 float shuntvoltage;
 float busvoltage;
@@ -18,23 +28,31 @@ float current_mA;
 String busvoltage_str;
 String current_mA_str;
 
-#define ESP32C3
+// #define ESP32C3
+#define ESP32S2mini
 
 /*
 ESP32C3-6 & ESP32C3-8 at TBS linking with DEV_5 (AASAS M10)
 ESP32C3-4 & ESP32C3-7 at MKE2 linking with S2_3 (AASAS M03)
 ESP32C3-3 is currently a work in progress (container & booster upgrade)
+ESP32S2m1 48:27:e2:5d:c5:1c / 48:27:E2:5D:C5:1C
 */
 
 // Set your Board ID (ESP32 Sender #1 = BOARD_ID 1, ESP32 Sender #2 = BOARD_ID 2, etc)
 #ifdef ESP32C3
-  #define BOARD_ID    "ESP32C3-4" // enter model name here ESPC3-3 / -4 / -5 / -6 / -7 / -8 
+  #define BOARD_ID    "ESP32C3-1" // enter model name here ESPC3-3 / -4 / -5 / -6 / -7 / -8 
   #define LED         19    // 19 if ESP32-C3
   #define RED         0x03 // 0x03 if ESP32-C3
   #define GRN         0x04 // 0x04 if ESP32-C3
   #define BLU         0x05 // 0x05 if ESP32-C3
+#elif defined ESP32S2mini
+  #define BOARD_ID    "ESP32S2m1" // enter model name here ESP32S2m1 / -m2 / -m3
+  #define LED         15    
+  #define RED         0x03 
+  #define GRN         0x04 
+  #define BLU         0x05 
 #else
-  #define BOARD_ID    0x02  // DO NOT FORGET TO CHANGE THIS ID either 0x01 (client1) or 0x02 (client2)
+  #define BOARD_ID    "Unknown"  // DO NOT FORGET TO CHANGE THIS ID either 0x01 (client1) or 0x02 (client2)
   #define LED         0x02  // 0x02 if ESP01/ESP32 
   #define RED         23    // 23 NOT USED (JUST DUMMY)
   #define GRN         18 
@@ -50,12 +68,15 @@ bool send_success = false;
 #ifdef LOCATION_MKE2_UiTM_WiFi_IoT
   const char WIFI_SSID[] = "UiTM WiFi IoT"; //. constexpr
   uint8_t serverAddress[] = {0x7C, 0xDF, 0xA1, 0x00, 0xBA, 0x9E}; // ESP32S2-3
+  const char serverName[] = "ESP32S2-3";
 #elif defined LOCATION_MKE2_MaxisONE
   const char WIFI_SSID[] = "MaxisONE Fibre 2.4G";
   uint8_t serverAddress[] = {0x7C, 0xDF, 0xA1, 0x00, 0xBA, 0x9E}; // ESP32S2-3
+  const char serverName[] = "ESP32S2-3";
 #else
   const char WIFI_SSID[] = "MaxisONE Fibre 2.4G_EXT";
   uint8_t serverAddress[] = {0x84, 0x0D, 0x8E, 0xE2, 0xD6, 0xD8}; // ESP32DEV_5 (TBS) 
+  const char serverName[] = "ESP32DEV_5/AASAS M10";
 #endif
 
 //Structure example to send data
@@ -148,6 +169,7 @@ void i2c_scan() {
         Serial.print("0");
       }
       Serial.println(address,HEX);
+      if(address == 0x3C) OLED_AVAILABLE      = true;
       if(address == 0x3E) GROVE_LCD_AVAILABLE = true;
       if(address == 0x40) INA219_AVAILABLE    = true;
       if(address == 0x48) ADS1115_AVAILABLE   = true;
@@ -208,6 +230,48 @@ for(int i=0;i<3;i++){
   // WiFi.disconnect();
   // WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
 
+
+  #ifdef ESP32S2mini
+
+  if(OLED_AVAILABLE){
+    // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+    if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+      Serial.println(F("SSD1306 allocation failed"));
+      for(;;); // Don't proceed, loop forever
+    }    
+
+    display.display();
+    delay(1000); // Pause for 2 seconds
+
+    // Clear the buffer
+    display.clearDisplay();
+    display.setTextSize(1);             // Normal 1:1 pixel scale
+    display.setTextColor(SSD1306_WHITE);        // Draw white text
+    display.setCursor(0,0);             // Start at top-left corner
+    display.println("ESPNOW CLIENT\n MON 26/06/2023");
+    display.setCursor(0,16);             // Start at top-left corner
+
+    display.setTextColor(SSD1306_BLACK, SSD1306_WHITE); // Draw 'inverse' text
+    display.println("Board ID: " + String(BOARD_ID));
+
+    display.setCursor(0,32);             // Start at top-left corner
+    display.setTextSize(1);             // Draw 2X-scale text
+    display.setTextColor(SSD1306_BLACK, SSD1306_WHITE); // Draw 'inverse' text
+    display.println(mac_str);
+    display.display();
+
+
+    display.setCursor(0,48);             // Start at top-left corner
+    display.setTextColor(SSD1306_WHITE); // Draw 'inverse' text
+    for(int i=0; i < 42 ; i++){
+      display.print('|');
+      display.display();
+      delay(10);
+    }
+  }
+ 
+#endif  
+
   // Set device as a Wi-Fi Station and set channel
   WiFi.mode(WIFI_STA); // WIFI_AP WIFI_AP_STA WIFI_STA
   Serial.print("WiFi SSID that this ESP is connecting to explicitly: ");
@@ -224,7 +288,10 @@ for(int i=0;i<3;i++){
   //Init ESP-NOW
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");
+    digitalWrite(LED,LOW);
     return;
+  }else{
+    digitalWrite(LED,HIGH);    
   }
     // Once ESPNow is successfully Init, we will register for recv CB to
   // get recv packer info
@@ -270,9 +337,12 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
 
 }
  
+bool timeout = false;
+
 void loop() {
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= interval) {
+    timeout = false;    
     if(INA219_AVAILABLE){
       getINA219();
     }else{
@@ -298,6 +368,7 @@ void loop() {
     if (result == ESP_OK && send_success) {
       Serial.println("[SHOULD BLINK BLUE] Sent with success");
       digitalWrite(BLU, HIGH); 
+      digitalWrite(LED, HIGH);
       delay(50);
     }
     else {
@@ -305,7 +376,62 @@ void loop() {
       digitalWrite(GRN, HIGH);
       delay(50);
     }
+
+      String res;
+      if(send_success) 
+        res = "Success";
+      else
+        res = "Failed";
+
+      if(OLED_AVAILABLE){
+        display.clearDisplay();
+        display.setTextSize(1);             // Normal 1:1 pixel scale
+        display.setTextColor(SSD1306_WHITE);        // Draw white text
+        display.setCursor(0,0);             // Start at top-left corner
+        display.println("P:"+String(payload_id));
+        display.setCursor(64,0); 
+        display.setTextColor(SSD1306_BLACK, SSD1306_WHITE); // Draw 'inverse' text
+        display.println("Res:"+ res);
+        display.setCursor(0,8);             // Start at top-left corner
+        display.setTextSize(1);             // Draw 2X-scale text
+        display.setTextColor(SSD1306_WHITE);
+        display.println("V:"+String(busvoltage)+"V I:"+String(current_mA)+"mA");
+        display.setCursor(0,16);             // Start at top-left corner
+        display.setTextSize(1);             // Draw 2X-scale text
+        display.setTextColor(SSD1306_WHITE);
+        display.println("T:"+String(myData.temp)+" H:"+String(myData.humi));
+        display.setCursor(0,24);             // Start at top-left corner
+        display.setTextSize(1);             // Draw 2X-scale text
+        display.setTextColor(SSD1306_WHITE);
+        display.println("M:"+String(myData.mois)+" R:"+String(myData.rain));
+        display.setCursor(0,40);             // Start at top-left corner
+        display.setTextSize(1);             // Draw 2X-scale text
+        display.setTextColor(SSD1306_BLACK, SSD1306_WHITE); // Draw 'inverse' text
+        display.println("ID: "+ String(BOARD_ID));
+        display.setCursor(0,50);             // Start at top-left corner
+        display.setTextSize(1);             // Draw 2X-scale text
+        display.setTextColor(SSD1306_BLACK, SSD1306_WHITE); // Draw 'inverse' text
+        display.println("HS: "+ String(serverName)); // handshake server
+        display.display();
+
+      }
   } // end of if
+  else{
+    if(!timeout){
+      timeout = true;
+      display.setCursor(0,32);             // Start at top-left corner
+      display.setTextSize(1);             // Draw 2X-scale text
+      display.setTextColor(SSD1306_WHITE);
+    }
+    if(currentMillis - previousMillis < interval){
+      // currentMillis = millis();
+      display.print("/");
+      display.display();
+      delay(200);
+    }
+  }
+
+  digitalWrite(LED, LOW);
   digitalWrite(BLU, LOW);
   digitalWrite(RED, LOW); 
   digitalWrite(GRN, LOW); 
