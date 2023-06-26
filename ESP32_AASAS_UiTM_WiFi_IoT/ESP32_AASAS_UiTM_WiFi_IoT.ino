@@ -190,6 +190,12 @@ uint8_t client8_mac[] = {0x7C, 0xDF, 0xA1, 0xAF, 0xAD, 0x20}; // changed 10.june
 String client8_mac_string = "7c:df:a1:af:ad:20"; // new C3-7 added 9.june.2023
 const char* client8_cchar = client8_mac_string.c_str(); // changed 10.june.2023 after SKJMT
 
+//48:27:E2:5D:C5:1C (S2m1)
+uint8_t client9_mac[] = {0x48, 0x27, 0xE2, 0x5D, 0xC5, 0x1C}; // changed 10.june.2023 after SKJMT
+String client9_mac_string = "48:27:e2:5d:c5:1c"; // added S2m1 26 June 2023 after condemning ESP32C3-3
+const char* client9_cchar = client9_mac_string.c_str(); // changed 10.june.2023 after SKJMT
+
+
 // Structure example to receive data
 // Must EXACTLY MATCH THE PATTERN of the sender's structure
 typedef struct struct_message {
@@ -582,6 +588,8 @@ void setup()
   if(strcmp(mac_addr,"7C:9E:BD:07:A8:E4")==0) esp_model = "ESP32DEV-4"; // 9C:9C:1F:C5:94:24 who is this?
   if(strcmp(mac_addr,"84:0D:8E:E2:D6:D8")==0) esp_model = "ESP32DEV-5";
   if(strcmp(mac_addr,"9C:9C:1F:C5:94:24")==0) esp_model = "ESP32DEV-6"; // added 19 Jun 2023
+  
+  if(strcmp(mac_addr,"48:27:E2:5D:C5:1C")==0) esp_model = "ESP32S2m1"; // added 19 Jun 2023
 
 
   Serial.printf("[setup] %s Found!\n",esp_model);
@@ -823,6 +831,10 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
   {
     Serial.println("Client ESP32C3-8");
   }
+  if(strcmp(macStr, client9_cchar) == 0) 
+  {
+    Serial.println("Client ESP32S2m1");
+  }
   // Serial.println("Unknown Client! Check client's MAC");
 
 
@@ -869,7 +881,7 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     prev_read_id2 = read_id2;
   } 
 
-  if(incomingReadings.id == "ESP32S2m1"){ // condemned changed to ESP32S2m1
+  if(incomingReadings.id == "ESP32S2m1"){ // condemned C3-3 changed to ESP32S2m1
     temp3 = incomingReadings.temp;
     humi3 = incomingReadings.humi;
     moist3 = incomingReadings.mois;
@@ -1063,6 +1075,19 @@ void ESPNOW_HandlerTask(void * pvParameters)
     Serial.println("Failed to add peer client ID 8 (ESP32C3-8)");
     return;
   }
+
+    // Register peer (peer here is going to be client-S2m1) CLIENT ID S2m1
+  esp_now_peer_info_t peerInfo9;
+  memset(&peerInfo9, 0, sizeof(peerInfo9)); // https://github.com/espressif/arduino-esp32/issues/6029
+  memcpy(peerInfo9.peer_addr, client9_mac, 6);
+  peerInfo8.encrypt = false;
+  
+  // Add peer CLIENT ID 3       
+  if (esp_now_add_peer(&peerInfo8) != ESP_OK){
+    Serial.println("Failed to add peer client ID 8 (ESP32C3-8)");
+    return;
+  }
+
 
   // esp_now_peer_num_t 
   // coming from client-side code end ----------------------------------------------------------
