@@ -8,14 +8,17 @@ Connected and Disconnected logic furnished 15 Feb 2023
 solving MD5 flash issue Sunday 18 June 2023 at TBS
 python3 -m esptool --chip esp32 write_flash_status --non-volatile 0
 python3 -m esptool --chip esp32 erase_flash 
+
+need to limit INA219 readout from ESPNOW to 2 decimal places 28 June 2023
+change the struct on both server and client
 */
 // #define ESP32S2_1  // M01
 // #define ESP32S2_2  // M02
-#define ESP32S2_3  // M03
+// #define ESP32S2_3  // M03
 // #define ESP32S2_4  // M04
 // #define ESP32S2_5  // M05
 // #define ESP32S2_6  // M06
-// #define ESP32DEV_1 // M07
+#define ESP32DEV_1 // M07 control water valve & pump
 // #define ESP32DEV_2 // M08 @ water level sensing
 // #define ESP32DEV_3
 // #define ESP32DEV_4 // M09 missing usb port @ TBS front gate
@@ -85,7 +88,7 @@ RTC_DATA_ATTR int bootCount = 0;
 
 // #define REGULAR_I2C_LCD // comment if using GROVE_LCD
 
-#define LOCATION_MKE2_UiTM_WiFi_IoT // comment this line for TBS deployment
+// #define LOCATION_MKE2_UiTM_WiFi_IoT // comment this line for TBS deployment
 // #define LOCATION_MKE2_MaxisONE // comment this line for TBS deployment
 
 /* Comment this out to disable prints and save space */
@@ -420,9 +423,9 @@ String disconnected_ts = "None";
 String hostname = BLYNK_DEVICE_NAME;
 String default_hostname = "None";
 
-float shuntvoltage;
-float busvoltage;
-float current_mA;
+float shuntvoltage = -1.0;
+float busvoltage = -1.0;
+float current_mA = -1.0;
 
 bool I2C_LCD_AVAILABLE = false;
 bool GROVE_LCD_AVAILABLE = false; // true for debugging purpose 27.02.2023 | change to false 03.03.2023
@@ -494,6 +497,7 @@ BLYNK_WRITE(V25);
 BLYNK_WRITE(V26);
 BLYNK_WRITE(V27);
 
+double round_2dp(double x); // prototype for func to reduce floating precision
 void BLYNK_TASK();
 void i2c_scan();
 void initINA219();
@@ -511,9 +515,9 @@ void clear_restartCounter();
 void clear_disconnCounter();
 void try_wifi_connect(int timeout);
 
-void onRelay1();
+void onRelay1(); // 12V DC solenoid water valve
 void onRelay2(); // borrow this function to turn on/off i2c LCD LED backlight 
-void onRelay3();
+void onRelay3(); // 12V DC water pump
 void offRelay1();
 void offRelay2();
 void offRelay3();
@@ -525,7 +529,7 @@ String openWeatherMapApiKey = "dbd7235bcc77e5896c73e975d013debe";
 String city = "Kuching";
 String countryCode = "MY";
 unsigned long lastTime = 0;
-unsigned long interval = 2000;
+unsigned long interval = 60000;
 
 String jsonBuffer   = "None";
 String jsonString   = "None";
@@ -626,7 +630,7 @@ void setup()
     lcd.print(esp_model);
     lcd.setCursor(0,1);
     lcd.print(mac_str);
-    delay(2000);
+    delay(1000);
     lcd.clear();
     lcd.setCursor(0,0);
     lcd.print("Hello "+ String(BLYNK_DEVICE_NAME));
@@ -840,11 +844,14 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
 
   memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
 
+  float v_2dp = round_2dp(incomingReadings.volt);
+  float i_2dp = round_2dp(incomingReadings.amps);
+
   // must use double quote for the json label 27.08.2022
   board["d"] = incomingReadings.id; 
   board["#"] = String(incomingReadings.readingId);
-  board["v"] = incomingReadings.volt; 
-  board["a"] = incomingReadings.amps;  
+  board["v"] = v_2dp; 
+  board["a"] = i_2dp;  
   board["t"] = incomingReadings.temp; 
   board["h"] = incomingReadings.humi; 
   board["m"] = incomingReadings.mois; 
@@ -856,8 +863,8 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     humi1 = incomingReadings.humi;
     moist1 = incomingReadings.mois;
     rain1 = incomingReadings.rain;
-    volt1 = incomingReadings.volt;
-    amps1 = incomingReadings.amps;
+    volt1 = round_2dp(incomingReadings.volt);
+    amps1 = round_2dp(incomingReadings.amps);
     read_id1 = incomingReadings.readingId;
     dt1 = get_timestamp();
     jsonString1 = JSON.stringify(board);
@@ -871,8 +878,8 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     humi2 = incomingReadings.humi;
     moist2 = incomingReadings.mois;
     rain2 = incomingReadings.rain;
-    volt2 = incomingReadings.volt;
-    amps2 = incomingReadings.amps;
+    volt2 = round_2dp(incomingReadings.volt);
+    amps2 = round_2dp(incomingReadings.amps);
     read_id2 = incomingReadings.readingId;
     dt2 = get_timestamp();
     jsonString2 = JSON.stringify(board);
@@ -886,8 +893,8 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     humi3 = incomingReadings.humi;
     moist3 = incomingReadings.mois;
     rain3 = incomingReadings.rain;
-    volt3 = incomingReadings.volt;
-    amps3 = incomingReadings.amps;
+    volt3 = round_2dp(incomingReadings.volt);
+    amps3 = round_2dp(incomingReadings.amps);
     read_id3 = incomingReadings.readingId;
     dt3 = get_timestamp();
     jsonString3 = JSON.stringify(board);
@@ -901,8 +908,8 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     humi4 = incomingReadings.humi;
     moist4 = incomingReadings.mois;
     rain4 = incomingReadings.rain;
-    volt4 = incomingReadings.volt;
-    amps4 = incomingReadings.amps;
+    volt4 = round_2dp(incomingReadings.volt);
+    amps4 = round_2dp(incomingReadings.amps);
     read_id4 = incomingReadings.readingId;
     dt4 = get_timestamp();
     jsonString4 = JSON.stringify(board);
@@ -916,8 +923,8 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     humi6 = incomingReadings.humi;
     moist6 = incomingReadings.mois;
     rain6 = incomingReadings.rain;
-    volt6 = incomingReadings.volt;
-    amps6 = incomingReadings.amps;
+    volt6 = round_2dp(incomingReadings.volt);
+    amps6 = round_2dp(incomingReadings.amps);
     read_id6 = incomingReadings.readingId;
     dt6 = get_timestamp();
     jsonString6 = JSON.stringify(board);
@@ -931,8 +938,8 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     humi7 = incomingReadings.humi;
     moist7 = incomingReadings.mois;
     rain7 = incomingReadings.rain;
-    volt7 = incomingReadings.volt;
-    amps7 = incomingReadings.amps;
+    volt7 = round_2dp(incomingReadings.volt);
+    amps7 = round_2dp(incomingReadings.amps);
     read_id7 = incomingReadings.readingId;
     dt7 = get_timestamp();
     jsonString7 = JSON.stringify(board);
@@ -947,8 +954,8 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     humi8 = incomingReadings.humi;
     moist8 = incomingReadings.mois;
     rain8 = incomingReadings.rain;
-    volt8 = incomingReadings.volt;
-    amps8 = incomingReadings.amps;
+    volt8 = round_2dp(incomingReadings.volt);
+    amps8 = round_2dp(incomingReadings.amps);
     read_id8 = incomingReadings.readingId;
     dt8 = get_timestamp();
     jsonString8 = JSON.stringify(board);
@@ -1076,15 +1083,15 @@ void ESPNOW_HandlerTask(void * pvParameters)
     return;
   }
 
-    // Register peer (peer here is going to be client-S2m1) CLIENT ID S2m1
+    // Register peer (peer here is going to be client-peerInfo9) CLIENT ID S2m1
   esp_now_peer_info_t peerInfo9;
   memset(&peerInfo9, 0, sizeof(peerInfo9)); // https://github.com/espressif/arduino-esp32/issues/6029
   memcpy(peerInfo9.peer_addr, client9_mac, 6);
-  peerInfo8.encrypt = false;
+  peerInfo9.encrypt = false;
   
-  // Add peer CLIENT ID 3       
-  if (esp_now_add_peer(&peerInfo8) != ESP_OK){
-    Serial.println("Failed to add peer client ID 8 (ESP32C3-8)");
+  // Add peer S2 Mini 1
+  if (esp_now_add_peer(&peerInfo9) != ESP_OK){
+    Serial.println("Failed to add peer client ID S2m1 (ESP32S2m1)");
     return;
   }
 
@@ -1202,15 +1209,12 @@ void try_wifi_connect(int timeout){
 
     if(WiFi.status() == WL_CONNECTED){
       Serial.println("WiFi Connected!");
-      delay(2000);
       Serial.println("Syncing RTC via NTP now...");
-      delay(2000);
       timeClient.begin();
       timeClient.setTimeOffset(28800);
       timeClient.update();
       sync_rtc_ntp();
       Serial.println("Syncing RTC via NTP complete. RTC is now up-to-date!");
-      delay(2000);
     }
   
     if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
@@ -1300,24 +1304,27 @@ String get_timestamp(){
     etaHour = setSleepHour - currentHour;
     etaMin = 60 - currentMin;
     etaSec = 60 - currentsec;
-
     etaDS = String(etaHour)+":"+String(etaMin)+":"+String(etaSec);  
+    int onlineHour = currentHour + SLEEP_HOUR - 24; // calc reconnection time
+
+    String onHour, onMin;
+    if(onlineHour < 10) onHour = "0"+String(onlineHour);
+    else                onHour = String(onlineHour);      
+    if(currentMin < 10) onMin = "0"+String(currentMin);
+    else                onMin = String(currentMin);
+
     Blynk.virtualWrite(V3, "DS starts in T-"+ etaDS);
     if((currentHour >= setSleepHour && currentMin >= setSleepMin) || (currentHour >= 0 && currentHour < 7)){
       Serial.println("Going to sleep now. Pushing Deep Sleep Timestamp of " + dateTime);
-      int onlineHour = currentHour + SLEEP_HOUR - 24; // calc reconnection time
       Serial.println("Will be back online at " + String(onlineHour) + ":" + String(currentMin));
       Blynk.virtualWrite(V3, "DS started at "+ dateTime);
+      delay(1000);
+      Blynk.virtualWrite(V3, "Back online at " + (onHour) + ":" + (onMin));
       Serial.flush(); 
       lcd.clear();
       lcd.setCursor(0, 0); // row 0, column 0
       lcd.print("-Back Online at:");
       lcd.setCursor(0, 1); // row 0, column 0
-      String onHour, onMin;
-      if(onlineHour < 10)
-        onHour = "0"+String(onlineHour);
-      if(currentMin < 10)
-        onMin = "0"+String(currentMin);
       lcd.print(onHour+ ":" + onMin + " V:" + String(busvoltage));
       delay(1000);
       #ifdef REGULAR_I2C_LCD
@@ -1625,7 +1632,8 @@ void initINA219(){
     lcd.print("CHECK I2C WIRE");
     while (1) { delay(10); }
   }
-  ina219_A.setCalibration_32V_2A();
+  // ina219_A.setCalibration_32V_2A();
+  ina219_A.setCalibration_16V_400mA();
 }
 
 void getINA219(){
@@ -1837,7 +1845,7 @@ float get_ambient_temp()
   
 void BLYNK_TASK(){
     tick++; // to replace tick
-    getINA219();
+    if(INA219_AVAILABLE) getINA219();
     if(ADS1115_AVAILABLE) 
       read_ads1115(); //   Blynk.virtualWrite(V18, ads_readout) happening inside func
     else{
@@ -1906,7 +1914,7 @@ void BLYNK_TASK(){
             lcd.setCursor(0,0); // TBS
             lcd.print("C3-6 #"+String(read_id6)+" V:" + String(volt6)); // print connected SSID
             lcd.setCursor(0,1); // MKE2
-            lcd.print("C3-8 #"+String(read_id8)+" V:" + String(volt8)); // print connected SSID
+            lcd.print("S2m1 #"+String(read_id3)+" V:" + String(volt3)); // print connected SSID
           #endif
         }
     }
@@ -2188,3 +2196,6 @@ void print_wakeup_reason(){
   }
 }
 
+double round_2dp(double x){
+  return (int)(x * 100 + 0.5) / 100.0;
+}
