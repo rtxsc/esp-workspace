@@ -23,8 +23,8 @@ b8:27:eb:80:a4:3a
 
 ###### ESP32-DEV #################################
 
-# ESP32DEV-0 (condemned / broken)
-AC:67:B2:25:85:78 
+# ESP32DEV-0 NEW 14/07/2023
+7C:9E:BD:07:3A:98
 
 # ESP32DEV-1
 C8:2B:96:B9:A9:58
@@ -35,8 +35,8 @@ C8:2B:96:B9:A9:58
 # ESP32DEV-3
 84:CC:A8:5E:6E:E8
 
-# ESP32DEV-4
-7C:9E:BD:07:A8:E4 (broken USB at TBS as AASAS M09)
+# ESP32DEV-4 NEW 14/07/2023
+4C:11:AE:D7:9B:E0
 
 # ESP32DEV-5 (currently at TBS as AASAS M10)
 84:0D:8E:E2:D6:D8

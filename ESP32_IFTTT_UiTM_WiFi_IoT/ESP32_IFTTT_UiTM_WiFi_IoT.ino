@@ -16,21 +16,21 @@ change the struct on both server and client
 // #define ESP32S2_2  // M02
 // #define ESP32S2_3  // M03
 // #define ESP32S2_4  // M04
-// #define ESP32S2_5  // M05
+#define ESP32S2_5  // M05
 // #define ESP32S2_6  // M06
 // #define ESP32DEV_1 // M07 control water valve & pump
 // #define ESP32DEV_2 // M08 @ water level sensing
 // #define ESP32DEV_3
-#define ESP32DEV_4 // DEV_4 NEW TBS front gate (perfect DEV)
+// #define ESP32DEV_4 // DEV_4 NEW TBS front gate (perfect DEV)
 // #define ESP32DEV_5 // M10
 // #define ESP32DEV_6 // TBS front gate (perfect DEV)
 // #define ESP32DEV_0 // DEV_0 NEW TBS front gate (perfect DEV)
 // #define ESP32C3_4
 
-#define REGULAR_I2C_LCD // comment if using GROVE_LCD
-// #define LOCATION_MKE2_UiTM_WiFi_IoT // comment this line for TBS deployment
-#define LOCATION_MKE2_MaxisONE // comment this line for MaxisONE Fibre 2.4G_EXT
-
+// #define REGULAR_I2C_LCD // comment if using GROVE_LCD
+#define LOCATION_MKE2_UiTM_WiFi_IoT // comment this line for TBS deployment
+// #define LOCATION_MKE2_MaxisONE // comment this line for MaxisONE Fibre 2.4G_EXT
+// #define Maxis_Postpaid_128
 
 /*
 V1 dateTime
@@ -111,7 +111,7 @@ RTC_DATA_ATTR int bootCount = 0;
   #define BLYNK_DEVICE_NAME "AASAS M04"
   #define BLYNK_AUTH_TOKEN "gee5lkJxSCmQrqplsAiH-uVPuNkF-B3G"
 #elif defined ESP32S2_5 || defined ESP32DEV_2
-  #define BLYNK_DEVICE_NAME "AASAS M05"
+  #define BLYNK_DEVICE_NAME "IFTTT M05"
   #define BLYNK_AUTH_TOKEN "Rq548So3QmWpZIJyAt59TVmW8W4GGlUd"
 #elif defined ESP32S2_6
   #define BLYNK_DEVICE_NAME "AASAS M06"
@@ -153,6 +153,62 @@ RTC_DATA_ATTR int bootCount = 0;
 #include <Arduino_JSON.h>
 #include "DS1307.h"
 #include <ChainableLED.h>
+
+#include "WiFiClientSecure.h"
+#include "Adafruit_MQTT.h"
+#include "Adafruit_MQTT_Client.h"
+
+#define AIO_SERVER      "io.adafruit.com"
+// Using port 8883 for MQTTS
+#define AIO_SERVERPORT  8883                  
+#define AIO_USERNAME    "clumzyazid"
+#define AIO_KEY         "aio_VGkW373G4psoR4xzLlG4WvOsmvue"
+
+String entryStatus = "None";
+
+WiFiClientSecure client;
+
+Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);    
+
+// io.adafruit.com root CA
+const char* adafruitio_root_ca = \
+      "-----BEGIN CERTIFICATE-----\n"
+      "MIIEjTCCA3WgAwIBAgIQDQd4KhM/xvmlcpbhMf/ReTANBgkqhkiG9w0BAQsFADBh\n"
+      "MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n"
+      "d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBH\n"
+      "MjAeFw0xNzExMDIxMjIzMzdaFw0yNzExMDIxMjIzMzdaMGAxCzAJBgNVBAYTAlVT\n"
+      "MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j\n"
+      "b20xHzAdBgNVBAMTFkdlb1RydXN0IFRMUyBSU0EgQ0EgRzEwggEiMA0GCSqGSIb3\n"
+      "DQEBAQUAA4IBDwAwggEKAoIBAQC+F+jsvikKy/65LWEx/TMkCDIuWegh1Ngwvm4Q\n"
+      "yISgP7oU5d79eoySG3vOhC3w/3jEMuipoH1fBtp7m0tTpsYbAhch4XA7rfuD6whU\n"
+      "gajeErLVxoiWMPkC/DnUvbgi74BJmdBiuGHQSd7LwsuXpTEGG9fYXcbTVN5SATYq\n"
+      "DfbexbYxTMwVJWoVb6lrBEgM3gBBqiiAiy800xu1Nq07JdCIQkBsNpFtZbIZhsDS\n"
+      "fzlGWP4wEmBQ3O67c+ZXkFr2DcrXBEtHam80Gp2SNhou2U5U7UesDL/xgLK6/0d7\n"
+      "6TnEVMSUVJkZ8VeZr+IUIlvoLrtjLbqugb0T3OYXW+CQU0kBAgMBAAGjggFAMIIB\n"
+      "PDAdBgNVHQ4EFgQUlE/UXYvkpOKmgP792PkA76O+AlcwHwYDVR0jBBgwFoAUTiJU\n"
+      "IBiV5uNu5g/6+rkS7QYXjzkwDgYDVR0PAQH/BAQDAgGGMB0GA1UdJQQWMBQGCCsG\n"
+      "AQUFBwMBBggrBgEFBQcDAjASBgNVHRMBAf8ECDAGAQH/AgEAMDQGCCsGAQUFBwEB\n"
+      "BCgwJjAkBggrBgEFBQcwAYYYaHR0cDovL29jc3AuZGlnaWNlcnQuY29tMEIGA1Ud\n"
+      "HwQ7MDkwN6A1oDOGMWh0dHA6Ly9jcmwzLmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydEds\n"
+      "b2JhbFJvb3RHMi5jcmwwPQYDVR0gBDYwNDAyBgRVHSAAMCowKAYIKwYBBQUHAgEW\n"
+      "HGh0dHBzOi8vd3d3LmRpZ2ljZXJ0LmNvbS9DUFMwDQYJKoZIhvcNAQELBQADggEB\n"
+      "AIIcBDqC6cWpyGUSXAjjAcYwsK4iiGF7KweG97i1RJz1kwZhRoo6orU1JtBYnjzB\n"
+      "c4+/sXmnHJk3mlPyL1xuIAt9sMeC7+vreRIF5wFBC0MCN5sbHwhNN1JzKbifNeP5\n"
+      "ozpZdQFmkCo+neBiKR6HqIA+LMTMCMMuv2khGGuPHmtDze4GmEGZtYLyF8EQpa5Y\n"
+      "jPuV6k2Cr/N3XxFpT3hRpt/3usU/Zb9wfKPtWpoznZ4/44c1p9rzFcZYrWkj3A+7\n"
+      "TNBJE0GmP2fhXhP1D/XVfIW/h0yCJGEiV9Glm/uGOa3DXHlmbAcxSyCRraG+ZBkA\n"
+      "7h4SeM6Y8l/7MBRpPCz6l8Y=\n"
+      "-----END CERTIFICATE-----\n";
+
+Adafruit_MQTT_Subscribe ESP32S2_RGB_SW = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/TOGGLE");
+Adafruit_MQTT_Subscribe locationTracker = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/LocationAwareness"); // added 8 Nov 2023 Wednesday
+
+// Setup a feed called 'test' for publishing.
+// Notice MQTT paths for AIO follow the form: <username>/feeds/<feedname>
+Adafruit_MQTT_Publish pubTracker = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/TOGGLE");
+
+void MQTT_connect();
+
 
 TaskHandle_t Task1; // ESPNOW
 TaskHandle_t Task2; // BLYNK
@@ -374,6 +430,9 @@ char auth[] = BLYNK_AUTH_TOKEN;
 #elif defined LOCATION_MKE2_MaxisONE
   char ssid[] = "MaxisONE Fibre 2.4G";
   char pass[] = "respironics"; 
+#elif defined Maxis_Postpaid_128
+  char ssid[] = "Maxis Postpaid 128";
+  char pass[] = "respironics"; 
 #else
   char ssid[] = "MaxisONE Fibre 2.4G_EXT"; 
   char pass[] = "respironics"; // leave this empty as this is an open network
@@ -400,7 +459,14 @@ String ssidstr = "None";
 #define restartCounterAddress   0x0F // 15 & 16 : 2 bytes F 10 11
 #define disconnCounterAddress   0x12 // 18 & 19 bytes
 #define disconnectTS__Address   0x14 // 21 and beyond 
+// ******************************** IFTTT ENTRY STATUS DECLARATION STARTS ********************************
+#define entryStatusAddress      0x20
+#define entryTimestampAddress   0x21
 #define ADS_I2C_ADDRESS         0x48
+
+uint8_t entryState = 0; // 0 exited || 1 entered || 2 keluar || 3 masuk || 4 unknown
+String ets = "None";
+// ******************************** IFTTT ENTRY STATUS DECLARATION ENDS ********************************
 
 WiFiUDP             ntpUDP;
 NTPClient           timeClient(ntpUDP);
@@ -545,6 +611,7 @@ float humid ;
 String mac_str = "UNKNOWN MAC";
 String esp_model = "UNKNOWN ESP";
 
+
 void setup()
 {
   Serial.begin(115200);
@@ -652,11 +719,50 @@ void setup()
   // write16bitIntoEEPROM(wifiConnRetryAddress, 0); // comment this after debugging || the first upload
 
   // restartCounter = EEPROM.read(restartCounterAddress);
+  // 0 exited || 1 entered || 2 keluar || 3 masuk || 4 unknown
+  entryState = EEPROM.read(entryStatusAddress);
+  ets = readStringFromEEPROM(entryTimestampAddress);
   restartCounter = read16bitFromEEPROM(restartCounterAddress);
   disconnection_count = read16bitFromEEPROM(disconnCounterAddress);
   wifiRetryCount = read16bitFromEEPROM(wifiConnRetryAddress);
   if(wifiRetryCount > 65535) wifiRetryCount = 0;
   check_restart_count();
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("-Read IFTTT NFO-");
+  lcd.setCursor(0,1);
+  lcd.print("ETS n EntryState");
+  delay(1000);
+
+  ets = readStringFromEEPROM(entryTimestampAddress);
+  entryState = EEPROM.read(entryStatusAddress);
+
+  if(entryState == 0)
+    entryStatus = "EXITED[M]";
+  else if(entryState == 1)
+    entryStatus = "ENTERED[M]";
+  else if(entryState == 2)
+    entryStatus = "KELUAR[M]";
+  else if(entryState == 3)
+    entryStatus = "MASUK[M]";
+  else if(entryState == 4)
+    entryStatus = "UNKNOWN[M]";
+  else
+    entryStatus = "FAILED[M]";
+
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print(">>Read completed!");
+  lcd.setCursor(0,1);
+  lcd.print("Result...........");
+  delay(1000);
+  
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print(ets);
+  lcd.setCursor(0,1);
+  lcd.print(entryStatus);
+  delay(2000);
 
   pinMode(ONBOARD_LED, OUTPUT);
   pinMode(IN1, OUTPUT);
@@ -706,7 +812,7 @@ void setup()
     lcd.setCursor(0,0);
     lcd.print("Init TimeClient!");
     lcd.setCursor(0,1);
-    lcd.print("-Get restart ts!");
+    lcd.print("-Get restart TS!");
   }
   // 30 Dec 2022 Friday | Polished 10 Feb 2023 Friday
   // /Users/zidz/Documents/Arduino/libraries/Blynk/src/Adapters/BlynkArduinoClient.h (to fix connecting to blynk.cloud:80 infinite loop)
@@ -756,35 +862,232 @@ void setup()
   rgbOff();
  
 
-  xTaskCreatePinnedToCore(
-      BLYNK_HandlerTask,        /* Task function. */
-      "BLYNK",                  /* name of task. */
-      10000,                    /* Stack size of task */
-      NULL,                     /* parameter of the task */
-      1,                        /* priority of the task */
-      &Task2,                   /* Task handle to keep track of created task */
+  // xTaskCreatePinnedToCore(
+  //     BLYNK_HandlerTask,        /* Task function. */
+  //     "BLYNK",                  /* name of task. */
+  //     10000,                    /* Stack size of task */
+  //     NULL,                     /* parameter of the task */
+  //     1,                        /* priority of the task */
+  //     &Task2,                   /* Task handle to keep track of created task */
       
-      CORE_0);                  /* pin task to core 0 */     
-  delay(500); 
+  //     CORE_0);                  /* pin task to core 0 */     
+  // delay(500); 
 
-  xTaskCreatePinnedToCore(
-      ESPNOW_HandlerTask,       /* Task function. */
-      "ESPNOW",                 /* name of task. */
-      10000,                    /* Stack size of task */
-      NULL,                     /* parameter of the task */
-      1,                        /* priority of the task */
-      &Task1,                   /* Task handle to keep track of created task */
-      CORE_1);                  /* pin task to core 1 */                  
-  delay(500); 
+  // xTaskCreatePinnedToCore(
+  //     ESPNOW_HandlerTask,       /* Task function. */
+  //     "ESPNOW",                 /* name of task. */
+  //     10000,                    /* Stack size of task */
+  //     NULL,                     /* parameter of the task */
+  //     1,                        /* priority of the task */
+  //     &Task1,                   /* Task handle to keep track of created task */
+  //     CORE_1);                  /* pin task to core 1 */                  
+  // delay(500); 
 
+  mqtt.subscribe(&ESP32S2_RGB_SW);
+  mqtt.subscribe(&locationTracker); // added 8 Nov 2023 Wednesday
+
+  // Set Adafruit IO's root CA
+  client.setCACert(adafruitio_root_ca);
 
 } // end of setup
 
 
-void loop()
-{
-  // Blynk.run();
-  // timer.run();
+// void loop()
+// {
+//   // Blynk.run();
+//   // timer.run();
+// }
+
+uint32_t count=0;
+uint8_t x = 0;
+const char* pubStr = "ESP recv ";
+
+void loop() {
+  // Ensure the connection to the MQTT server is alive (this will make the first
+  // connection and automatically reconnect when disconnected).  See the MQTT_connect
+  // function definition further below.
+  MQTT_connect();
+
+  // // Now we can publish stuff!
+  // Serial.print(F("\nSending val "));
+  // Serial.print(x);
+  // Serial.print(F(" to pubTracker feed..."));
+  // if (! pubTracker.publish(x++)) {
+  //   Serial.println(F("Failed"));
+  // } else {
+  //   Serial.println(F("OK!"));
+  // }
+  // delay(5000);
+
+  Adafruit_MQTT_Subscribe *subscription;
+  while ((subscription = mqtt.readSubscription(1000))) { // timeout here is also acting like delay interval for the entire code
+    if (subscription == &ESP32S2_RGB_SW) {
+      Serial.print(F("Got: "));
+      Serial.println((char *)ESP32S2_RGB_SW.lastread);
+      if (!strcmp((char*) ESP32S2_RGB_SW.lastread, "1")){
+        rgbOff();
+        if (! pubTracker.publish("Restarting ESP32")) {
+          Serial.println(F("Failed"));
+        } else {
+          Serial.println(F("OK! Restart now"));
+          lcd.setCursor(0, 0); // row 1, column 0
+          lcd.print("Request Restart"); // default_hostname
+          lcd.setCursor(0, 1); // row 1, column 0
+          lcd.print("Bye-bye.......");
+          delay(1000);
+          ESP.restart();
+        }
+      }
+
+      // if (!strcmp((char*) ESP32S2_RGB_SW.lastread, "ON") || !strcmp((char*) ESP32S2_RGB_SW.lastread, "TOGGLE"))
+      // {
+      //   count++;
+      //   Serial.print("count=");
+      //   Serial.println(count);
+      // }
+      // if(count % 2 == 0)
+      //   redOn();
+      // else
+      //   rgbOff();
+  
+    } // end of ESP32S2_RGB_SW
+
+    // locationTracker added 8 Nov 2023 Wednesday
+    // 0 exited || 1 entered || 2 keluar || 3 masuk || 4 unknown
+    if(subscription == &locationTracker){
+      Serial.print(F("GPS Tracker Got: "));
+      Serial.println((char *)locationTracker.lastread);     
+      if (!strcmp((char*) locationTracker.lastread, "entered")){
+        entryStatus = "ENTERED";
+        entryState = 1;
+        greenOn();
+        if (! pubTracker.publish("Sent ESP32 received entered (GPS)")) {
+          Serial.println(F("Failed"));
+        } else {
+          Serial.println(F("OK! Sent ESP32 received entered (GPS)"));
+        }
+      } 
+      else if(!strcmp((char*) locationTracker.lastread, "exited")){
+        entryStatus = "EXITED";
+        entryState = 0;
+        rgbOff();
+        if (! pubTracker.publish("Sent ESP32 received exited (GPS)")) {
+          Serial.println(F("Failed"));
+        } else {
+          Serial.println(F("OK! Sent ESP32 received exited (GPS)"));
+        }
+      }
+      else if(!strcmp((char*) locationTracker.lastread, "masuk")){
+        entryStatus = "MASUK";
+        entryState = 3;
+        redOn();
+        if (! pubTracker.publish("Sent ESP32 received masuk (switch)")) {
+          Serial.println(F("Failed"));
+        } else {
+          Serial.println(F("OK! Sent ESP32 received masuk (switch)"));
+        }
+      }
+      else if(!strcmp((char*) locationTracker.lastread, "keluar")){
+        entryStatus = "KELUAR";
+        entryState = 2;
+        rgbOff();
+        if (! pubTracker.publish("Sent ESP32 received keluar (switch)")) {
+          Serial.println(F("Failed"));
+        } else {
+          Serial.println(F("OK! Sent ESP32 received keluar (switch)"));
+        }
+      }
+      else{
+        rgbOff();
+        // Serial.print("Feedback from ESP32 is:");
+        // Serial.println((char *)locationTracker.lastread);  
+        if (! pubTracker.publish((char *)locationTracker.lastread)) {
+          Serial.println(F("Failed"));
+        } else {
+          Serial.println(F("OK! Sent ESP32 received failed lastread"));
+      }   
+        entryStatus = (char *)locationTracker.lastread; // added 15 Nov 2023
+        entryState = 4;
+      }
+      ets = get_timestamp();
+      // #define entryStatusAddress      0x20
+      // #define entryTimestampAddress   0x21
+      Serial.println("EEPROM write started");
+      EEPROM.write(entryStatusAddress, entryState);
+      writeStringToEEPROM(entryTimestampAddress, ets);
+
+      /*
+      // this method was discovered on 15 Nov 2023
+      // using char array datatype and itoa method
+
+      char cstr[10];
+      itoa(entryState, cstr, 10);
+      String responseStr = "ESP32 ack response | entryState = ";
+      responseStr.concat(cstr);
+      Serial.print("cstr:");
+      Serial.println(cstr);
+      */
+      
+      String responseStr = "ESP32 ack response | entryState = ";
+      responseStr.concat(String(entryState));
+      responseStr.concat(" | ");   
+      responseStr.concat(entryStatus);   
+      const char* eeprom_ack_str = responseStr.c_str();
+
+      Serial.print("eeprom_ack_str:");
+      Serial.println(eeprom_ack_str);
+
+      if (! pubTracker.publish(eeprom_ack_str)) {
+          Serial.println(F("Failed"));
+      } else {
+          Serial.println(F(eeprom_ack_str));
+      }
+      Serial.println("EEPROM write ended");
+    } // end of locationTracker
+  } //  end of MQTT read subscription blocking loop
+
+
+  lcd.clear();
+  if(millis() % 2 == 0){
+    lcd.setCursor(0, 0); // row 1, column 0
+    lcd.print("Last "+ entryStatus); // default_hostname
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print(ets);
+  }
+  else{
+    display_uptime_top_row();
+    lcd.setCursor(0, 1); // row 1, column 0
+    lcd.print("Status:"+ entryStatus); // default_hostname
+  }
+
+} // end of void loop for MQTT
+
+void MQTT_connect() {
+  int8_t ret;
+  // Stop if already connected.
+  if (mqtt.connected()) {
+    return;
+  }
+
+ Serial.print("Connecting to Adafruit IO");
+
+  uint8_t retries = 5;
+  while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
+       Serial.println(mqtt.connectErrorString(ret));
+       Serial.println("Retrying Adafruit connection in 5 seconds...");
+       mqtt.disconnect();
+       delay(5000);  
+       retries--;
+       if (retries == 0) {
+        //  while (1);
+        Serial.println("Giving up MQTT...restarting now");
+        delay(1000);
+        ESP.restart();
+       }
+  }
+  Serial.println("");
+  Serial.println("MQTT Connected!");
+  Serial.println("****************** Adafruit IO is Connected! ****************** ");
 }
 
 
@@ -1621,24 +1924,24 @@ void init_eeprom(){
     Serial.println("failed to initialise EEPROM"); delay(1000000);
   }
 
-  // Serial.println(" bytes read from Flash:");
-  // for (int i = 0; i < EEPROM_SIZE; i++)
-  // {
-  //   if(i >= 21){
-  //     Serial.print("Disconnected Timestamp String Memory "); Serial.print(i);   Serial.print(":");
-  //   }
-  //   // else if(i== 12 || i==13){
-  //   //     Serial.print("WiFi Retry Count Memory "); Serial.print(i);   Serial.print(":");
-  //   // }
-  //   // else if(i== 15 || i==16){
-  //   //     Serial.print("Restart Count Memory "); Serial.print(i);   Serial.print(":");
-  //   // }else if (i== 18 || i==19){
-  //   //     Serial.print("Disconnection Count Memory "); Serial.print(i);   Serial.print(":");
-  //   // }else{
-  //   //     Serial.print("R "); Serial.print(i);   Serial.print(":");
-  //   // }
-  //   Serial.print(byte(EEPROM.read(i))); Serial.println();
-  // }
+  Serial.println(" bytes read from Flash:");
+  for (int i = 0; i < EEPROM_SIZE; i++)
+  {
+    if(i >= 21){
+      Serial.print("Disconnected Timestamp String Memory "); Serial.print(i);   Serial.print(":");
+    }
+    // else if(i== 12 || i==13){
+    //     Serial.print("WiFi Retry Count Memory "); Serial.print(i);   Serial.print(":");
+    // }
+    // else if(i== 15 || i==16){
+    //     Serial.print("Restart Count Memory "); Serial.print(i);   Serial.print(":");
+    // }else if (i== 18 || i==19){
+    //     Serial.print("Disconnection Count Memory "); Serial.print(i);   Serial.print(":");
+    // }else{
+    //     Serial.print("R "); Serial.print(i);   Serial.print(":");
+    // }
+    Serial.print(byte(EEPROM.read(i))); Serial.println();
+  }
   Serial.println();
 }
 
@@ -1925,7 +2228,7 @@ void BLYNK_TASK(){
     // Blynk.virtualWrite(V12, jsonWeather); // disabled temporarily
     #ifdef ESP32DEV_5
       Blynk.virtualWrite(V12, "S2m1 = " + jsonString3); // ESP32S2m1 taking over ESP32C3-3 (condemned)
-      Blynk.virtualWrite(V15, "C3-6 = " + jsonString6); // taking over disconnected ts
+      Blynk.virtualWrite(V15, "C3-6 = " + jsonString6); // taking over disconnected TS
     #elif defined ESP32S2_3
       Blynk.virtualWrite(V12, "C3-4 = " + jsonString4); // 
       Blynk.virtualWrite(V15, "C3-7 = " + jsonString7); //
