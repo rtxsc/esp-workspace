@@ -73,7 +73,7 @@ String signalDataCSV[payloadSizeCSV];
 
 bool payload_pushed = false;
 long payload_push_interval;
-int IS_PUSH_INTERVAL = 3600000; // default to 1 hour
+int IS_PUSH_INTERVAL = 3600000; // default to 1 hour 3600000
 
 #ifdef SECURE_CONN
   #include <WiFiClientSecure.h>
@@ -757,7 +757,7 @@ void blynk_tasks(){
                         String(classTSS)+","          + \
                         String(formatted_address)+"," + \
                         String(lat,4)+","+String(lon,4);
-                        ;
+                        
 
   signalData[payloadCount] = String(all_payload);   
   signalName[payloadCount] = "AllPayload_"+NODE_NUMBER;

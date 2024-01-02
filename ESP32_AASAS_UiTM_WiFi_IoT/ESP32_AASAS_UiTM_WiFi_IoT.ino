@@ -1,6 +1,7 @@
 /*
 Testing UiTM WiFi IoT 9/12/2022 Friday
 Works with ESP32S2
+Updated 2 Jan 2024 adding hydrogen readout data collection via Initial State
 Edited 28 Dec 2022
 Subscribed to Blynk Plus RM30.90/month on Monday 13 Feb 2023
 Connected and Disconnected logic furnished 15 Feb 2023
@@ -17,19 +18,19 @@ change the struct on both server and client
 // #define ESP32S2_3  // M03
 // #define ESP32S2_4  // M04
 // #define ESP32S2_5  // M05
-// #define ESP32S2_6  // M06
+#define ESP32S2_6  // M06 used for hydrogen sensor test + InitialState (takeover M04) 2 Jan 2024
 // #define ESP32DEV_1 // M07 control water valve & pump
 // #define ESP32DEV_2 // M08 @ water level sensing
 // #define ESP32DEV_3
-#define ESP32DEV_4 // DEV_4 NEW TBS front gate (perfect DEV)
+// #define ESP32DEV_4 // DEV_4 NEW TBS front gate (perfect DEV)
 // #define ESP32DEV_5 // M10
 // #define ESP32DEV_6 // TBS front gate (perfect DEV)
 // #define ESP32DEV_0 // DEV_0 NEW TBS front gate (perfect DEV)
 // #define ESP32C3_4
 
-#define REGULAR_I2C_LCD // comment if using GROVE_LCD
-// #define LOCATION_MKE2_UiTM_WiFi_IoT // comment this line for TBS deployment
-#define LOCATION_MKE2_MaxisONE // comment this line for MaxisONE Fibre 2.4G_EXT
+// #define REGULAR_I2C_LCD // comment if using GROVE_LCD
+#define LOCATION_MKE2_UiTM_WiFi_IoT // comment this line for TBS deployment
+// #define LOCATION_MKE2_MaxisONE // comment this line for MaxisONE Fibre 2.4G_EXT
 
 
 /*
@@ -113,9 +114,11 @@ RTC_DATA_ATTR int bootCount = 0;
 #elif defined ESP32S2_5 || defined ESP32DEV_2
   #define BLYNK_DEVICE_NAME "AASAS M05"
   #define BLYNK_AUTH_TOKEN "Rq548So3QmWpZIJyAt59TVmW8W4GGlUd"
-#elif defined ESP32S2_6
-  #define BLYNK_DEVICE_NAME "AASAS M06"
-  #define BLYNK_AUTH_TOKEN "qtER7nxNJH1QioLqmH_rE688VdJ5i0L0"
+#elif defined ESP32S2_6  // M06 used for hydrogen sensor test + InitialState (takeover M04)
+  // #define BLYNK_DEVICE_NAME "AASAS M06"
+  // #define BLYNK_AUTH_TOKEN "qtER7nxNJH1QioLqmH_rE688VdJ5i0L0"
+  #define BLYNK_DEVICE_NAME "AASAS M04"
+  #define BLYNK_AUTH_TOKEN "gee5lkJxSCmQrqplsAiH-uVPuNkF-B3G"
 #elif defined ESP32DEV_1
   #define BLYNK_DEVICE_NAME "AASAS M07"
   #define BLYNK_AUTH_TOKEN "K-NDkXmOkZNC3TIKZo6EOrqdQQ8-Mr_f"
@@ -129,6 +132,28 @@ RTC_DATA_ATTR int bootCount = 0;
   #define BLYNK_DEVICE_NAME "AASAS M09" 
   #define BLYNK_AUTH_TOKEN "ZELuVGWY16O3KPW8mLkgkdISj2ohVgP7"
 #endif
+
+
+#define SUCCESS                 1
+#define UNSUCCESSFUL            0
+
+#define ISDestURL "insecure-groker.initialstate.com" // https can't be handled by the ESP8266, thus "insecure"
+#define bucketKey_csv "HM8DGC599FDF"
+#define bucketName_csv "Hydrogen ESP32S2"
+
+#define accessKey "ist_jXh1F13mOQDwsBRQdcMHjvvlAVyLbTRi" // Access key (the one you find in your account settings):
+String signalNameCSV[] = {"h2readout_"};
+const byte payloadSizeCSV = sizeof(signalNameCSV)/sizeof(signalNameCSV[0]);
+String signalDataCSV[payloadSizeCSV];
+bool payload_pushed = false;
+long payload_push_interval;
+int IS_PUSH_INTERVAL = 3600000; // default to 1 hour
+String NODE_NUMBER = "S2-6";
+
+bool enableHeater = false;
+uint8_t loopCnt = 0;
+float t_sht = -1;
+float h_sht = -1;
 
 #include "GroveBase-ESPDuino32-Mapping.h"
 #include <esp_now.h>
@@ -146,6 +171,7 @@ RTC_DATA_ATTR int bootCount = 0;
 
 #include <Adafruit_NeoPixel.h>
 #include <Adafruit_INA219.h>
+#include "Adafruit_SHT31.h"
 
 #include <NTPClient.h>
 #include <WiFiUdp.h>
@@ -153,6 +179,9 @@ RTC_DATA_ATTR int bootCount = 0;
 #include <Arduino_JSON.h>
 #include "DS1307.h"
 #include <ChainableLED.h>
+
+
+WiFiClient       clientIS;  // IS added 2 Jan 2024
 
 TaskHandle_t Task1; // ESPNOW
 TaskHandle_t Task2; // BLYNK
@@ -309,6 +338,10 @@ float amps8 = 0;
 uint16_t read_id8 = 0;
 uint16_t prev_read_id8 = 0;
 
+
+float h2_0 = 0.0; // global for hydrogen readout 0x0
+float h2_1 = 0.0; // global for hydrogen readout 0x1
+
 #define RGB         18 
 #define NUMPIXELS   1 
 #define DELAYVAL    100 
@@ -407,6 +440,8 @@ NTPClient           timeClient(ntpUDP);
 BlynkTimer          timer;
 Adafruit_NeoPixel   pixels(NUMPIXELS, RGB);
 Adafruit_INA219     ina219_A;
+Adafruit_SHT31      sht31 = Adafruit_SHT31();
+
 ADS1115_WE          adc = ADS1115_WE(ADS_I2C_ADDRESS);
 DS1307              _clock;
 // comment either one of this
@@ -433,6 +468,7 @@ bool I2C_LCD_AVAILABLE = false;
 bool GROVE_LCD_AVAILABLE = false; // true for debugging purpose 27.02.2023 | change to false 03.03.2023
 bool INA219_AVAILABLE = false;
 bool ADS1115_AVAILABLE = false;
+bool SHT31_AVAILABLE = false;
 
 #define EEPROM_SIZE             48
 #define FAST_DELAY              1000
@@ -501,6 +537,8 @@ BLYNK_WRITE(V27);
 
 double round_2dp(double x); // prototype for func to reduce floating precision
 void BLYNK_TASK();
+void IS_TASK(); // added 2 Jan 2024 for InitialState csv hydrogen
+
 void i2c_scan();
 void initINA219();
 void init_eeprom();
@@ -647,6 +685,18 @@ void setup()
     }
     adc.setVoltageRange_mV(ADS1115_RANGE_4096); //comment line/change parameter to change range
   }
+
+  if(SHT31_AVAILABLE){
+    if (! sht31.begin(0x44)) {   // Set to 0x45 for alternate i2c addr
+      Serial.println("Couldn't find SHT31");
+      while (1) delay(1);
+    }
+    Serial.print("Heater Enabled State: ");
+    if (sht31.isHeaterEnabled())
+      Serial.println("ENABLED");
+    else
+      Serial.println("DISABLED");    
+  }
   
   init_eeprom();
   // write16bitIntoEEPROM(wifiConnRetryAddress, 0); // comment this after debugging || the first upload
@@ -777,6 +827,7 @@ void setup()
       CORE_1);                  /* pin task to core 1 */                  
   delay(500); 
 
+  if(!postBucket_csv()){};
 
 } // end of setup
 
@@ -1111,13 +1162,13 @@ void BLYNK_HandlerTask(void * pvParameters)
 {
 
   timer.setInterval(1000L, BLYNK_TASK);
+  timer.setInterval(3600000L, IS_TASK); // 3600000L = 1 hour
   // timer.setInterval(1000L, get_weather);
-
   Serial.print("BLYNK_HandlerTask running on core ");
   Serial.println(xPortGetCoreID());
   for(;;){    
     Blynk.run();
-    timer.run();
+    timer.run();   
   }
 } // end of FreeRTOS handler
 
@@ -1692,6 +1743,7 @@ void i2c_scan() {
       if(address == 0x27) I2C_LCD_AVAILABLE = true;
       if(address == 0x3E) GROVE_LCD_AVAILABLE = true;
       if(address == 0x40) INA219_AVAILABLE    = true;
+      if(address == 0x44) SHT31_AVAILABLE     = true;
       if(address == 0x48) ADS1115_AVAILABLE   = true;
       nDevices++;
     }
@@ -1849,6 +1901,13 @@ void read_ads1115(){
   Blynk.virtualWrite(V18, ads_readout);
 }
 
+void read_ads1115_hydrogen(){
+  h2_0 = readChannel(ADS1115_COMP_0_GND);   // MQ8 sensor 1 
+  h2_1 = readChannel(ADS1115_COMP_1_GND);   // MQ8 sensor 2
+  String ads_readout = "H2_0: "+ String(h2_0)+" mV H2_1: "+ String(h2_1)+" mV";
+  Blynk.virtualWrite(V18, ads_readout);
+}
+
 float readChannel(ADS1115_MUX channel) {
   float voltage = 0.0;
   adc.setCompareChannels(channel);
@@ -1873,12 +1932,24 @@ float get_ambient_temp()
     // Serial.println(temperature);
     return temperature;
 }
+
+void IS_TASK(){
+  byte payloadCountCSV = 0;
+  String all_payload =  String(h2_0) +","          + \
+                        String(h2_1) +","          + \
+                        String(t_sht) +","         + \
+                        String(h_sht);
+
+  signalDataCSV[payloadCountCSV] = String(all_payload);
+  signalNameCSV[payloadCountCSV] = "h2readout_"+NODE_NUMBER;
+  static_postData_csv();
+}
   
 void BLYNK_TASK(){
     tick++; // to replace tick
+    if(SHT31_AVAILABLE) get_sht31();
     if(INA219_AVAILABLE) getINA219();
-    if(ADS1115_AVAILABLE) 
-      read_ads1115(); //   Blynk.virtualWrite(V18, ads_readout) happening inside func
+    if(ADS1115_AVAILABLE) read_ads1115_hydrogen(); // Blynk.virtualWrite(V18, ads_readout) happening inside func
     else{
       // Blynk.virtualWrite(V18, "ADS1115 Not Connected"); // before adding sonar SR04-M2
       // Blynk.virtualWrite(V18, "Water Level = " + String(get_water_level_cm())+" cm @ " + String(waterLvlPercent)+"%");   
@@ -1920,8 +1991,8 @@ void BLYNK_TASK(){
     Blynk.virtualWrite(V6, busvoltage);
     Blynk.virtualWrite(V7, current_mA); 
     Blynk.virtualWrite(V9, get_rssi_state(RSSI_dBm));
-    Blynk.virtualWrite(V10, tempC);
-    Blynk.virtualWrite(V11, humid);
+    Blynk.virtualWrite(V10, t_sht); // tempC
+    Blynk.virtualWrite(V11, h_sht); // humid
     // Blynk.virtualWrite(V12, jsonWeather); // disabled temporarily
     #ifdef ESP32DEV_5
       Blynk.virtualWrite(V12, "S2m1 = " + jsonString3); // ESP32S2m1 taking over ESP32C3-3 (condemned)
@@ -1931,24 +2002,39 @@ void BLYNK_TASK(){
       Blynk.virtualWrite(V15, "C3-7 = " + jsonString7); //
     #else
     #endif    
-    Blynk.virtualWrite(V34, get_ambient_temp()); // gonna change this to V30 - 21/6/2023
+    Blynk.virtualWrite(V30, t_sht); // changed to V30 from V34 on 2 Jan 2024
+
 
     if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE)
       lcd.clear();
 
     if(displayESPNOW){
         if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
-          #if defined LOCATION_MKE2_MaxisONE || defined (LOCATION_MKE2_UiTM_WiFi_IoT)
+
+          if(millis() % 2 == 0){
             lcd.setCursor(0,0); // MKE2 
-            lcd.print("C3-4 #"+String(read_id4)+" V:" + String(volt4)); // print connected SSID
+            lcd.print("Temp: "+String(t_sht)+" *C"); 
             lcd.setCursor(0,1);
-            lcd.print("C3-7 #"+String(read_id7)+" V:" + String(volt7)); // print connected SSID
-          #else
-            lcd.setCursor(0,0); // TBS
-            lcd.print("C3-6 #"+String(read_id6)+" V:" + String(volt6)); // print connected SSID
-            lcd.setCursor(0,1); // MKE2
-            lcd.print("S2m1 #"+String(read_id3)+" V:" + String(volt3)); // print connected SSID
-          #endif
+            lcd.print("Humi: "+String(h_sht)+" %");  
+          }else{
+            lcd.setCursor(0,0); // MKE2 
+            lcd.print("H2_0: "+String(h2_0)+" mV"); 
+            lcd.setCursor(0,1);
+            lcd.print("H2_1: "+String(h2_1)+" mV");  
+
+          }
+ 
+          // #if defined LOCATION_MKE2_MaxisONE || defined (LOCATION_MKE2_UiTM_WiFi_IoT)
+          //   lcd.setCursor(0,0); // MKE2 
+          //   lcd.print("C3-4 #"+String(read_id4)+" V:" + String(volt4)); // print connected SSID
+          //   lcd.setCursor(0,1);
+          //   lcd.print("C3-7 #"+String(read_id7)+" V:" + String(volt7)); // print connected SSID
+          // #else
+          //   lcd.setCursor(0,0); // TBS
+          //   lcd.print("C3-6 #"+String(read_id6)+" V:" + String(volt6)); // print connected SSID
+          //   lcd.setCursor(0,1); // MKE2
+          //   lcd.print("S2m1 #"+String(read_id3)+" V:" + String(volt3)); // print connected SSID
+          // #endif
         }
     }
     else if(deep_sleep_activated){
@@ -2017,7 +2103,7 @@ BLYNK_CONNECTED() {
   wifiRetryCount = 0; // reset this back for the next cycle
   write16bitIntoEEPROM(wifiConnRetryAddress, wifiRetryCount);
   String blynk_on_connected_ts = get_timestamp();
-  Blynk.syncVirtual(V20,V21,V22,V23,V24,V25,V26,V40,V41);
+  Blynk.syncVirtual(V20,V21,V22,V23,V24,V25,V26,V28,V40,V41);
   Blynk.virtualWrite(V2, WiFi.localIP().toString());
   Blynk.virtualWrite(V3, restart_ts); 
   Blynk.virtualWrite(V5, restartCounter);
@@ -2155,12 +2241,12 @@ BLYNK_WRITE(V41){
 
 BLYNK_WRITE(V27){
   int pinValue = param.asInt();
-  if(pinValue) clear_disconnCounter();
+  // if(pinValue) clear_disconnCounter(); // disabled 2 Jan 2024
 }
 
 BLYNK_WRITE(V28){
   int pinValue = param.asInt();
-  if(pinValue) clear_wifiRetryCounter();
+  // if(pinValue) clear_wifiRetryCounter(); // disabled 2 Jan 2024
   if(pinValue) displayESPNOW = true;
   else         displayESPNOW = false;
 }
@@ -2248,4 +2334,119 @@ void print_wakeup_reason(){
 
 double round_2dp(double x){
   return (int)(x * 100 + 0.5) / 100.0;
+}
+
+bool postBucket_csv() {
+// close any connection before send a new request.
+// This will free the socket on the WiFi shield
+clientIS.stop();
+
+// if there's a successful connection:
+if (clientIS.connect(ISDestURL, 80) == SUCCESS) {
+ Serial.println("connecting...");
+  // send the HTTP PUT request:
+  // Build HTTP request.
+  String toSend = "POST /api/buckets HTTP/1.1\r\n";
+  toSend += "Host:";
+  toSend += ISDestURL;
+  toSend += "\r\n" ;
+  toSend += "User-Agent:Arduino\r\n";
+  toSend += "Accept-Version: ~0\r\n";
+  toSend += "X-IS-AccessKey: " accessKey "\r\n";
+  toSend += "Content-Type: application/json\r\n";
+  String payload = "{\"bucketKey\": \"" bucketKey_csv "\",";
+  payload += "\"bucketName\": \"" bucketName_csv "\"}";
+  payload += "\r\n";
+  toSend += "Content-Length: "+String(payload.length())+"\r\n";
+  toSend += "\r\n";
+  toSend += payload;
+
+  clientIS.println(toSend);
+  // Serial.println(toSend);
+  return true;
+} else {
+  // if you couldn't make a connection:
+  clientIS.stop();
+  lcd.clear();
+  lcd.setCursor(0, 0); // row 1, column 0
+  lcd.print("CONNECTION FAILD");
+  lcd.setCursor(0, 1); // row 1, column 0
+  lcd.print("NO INTERNET ACCS");
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  lcd.clear();
+  return false;
+  }
+}
+
+void static_postData_csv() {
+  // close any connection before send a new request.
+  // This will free the socket on the WiFi shield
+  clientIS.stop();
+  // if there's a successful connection:
+  // Serial.println("[static_postData_CSV] clientIS stopped and contacting ISDestURL ...");
+
+  if (clientIS.connect(ISDestURL, 80) == SUCCESS) {
+  //  Serial.println("[static_postData_CSV] connection to ISDestURL successful...");
+    // send the HTTP PUT request:
+    // Build HTTP request.
+
+    for (int i=0; i<payloadSizeCSV; i++){
+      String toSend = "POST /api/events HTTP/1.1\r\n";
+      toSend += "Host:";
+      toSend += ISDestURL;
+      toSend += "\r\n" ;
+      toSend += "Content-Type: application/json\r\n";
+      toSend += "User-Agent: Arduino\r\n";
+      toSend += "Accept-Version: ~0\r\n";
+      toSend += "X-IS-AccessKey: " accessKey "\r\n";
+      toSend += "X-IS-BucketKey: " bucketKey_csv "\r\n";
+
+      String payload = "[{\"key\": \"" + signalNameCSV[i] + "\", ";
+      payload +="\"value\": \"" + signalDataCSV[i] + "\"}]\r\n";
+
+      toSend += "Content-Length: "+String(payload.length())+"\r\n";
+      toSend += "\r\n";
+      toSend += payload;
+      // Serial.println(payload);
+      // Serial.println(toSend);
+      clientIS.println(toSend);
+    }
+    payload_pushed = true;
+  }
+} 
+
+
+void get_sht31() {
+  t_sht = sht31.readTemperature();
+  h_sht = sht31.readHumidity();
+
+  if (! isnan(t_sht)) {  // check if 'is not a number'
+    // Serial.print("Temp *C = "); Serial.print(t_sht); Serial.print("\t\t");
+    t_sht = t_sht;
+  } else { 
+    Serial.println("Failed to read temperature");
+  }
+  
+  if (! isnan(h_sht)) {  // check if 'is not a number'
+    // Serial.print("Hum. % = "); Serial.println(h_sht);
+    h_sht = h_sht;
+  } else { 
+    Serial.println("Failed to read humidity");
+  }
+
+  // delay(1000); // disabled - handled by BLYNK_TASK
+
+  // Toggle heater enabled state every 30 seconds
+  // An ~3.0 degC temperature increase can be noted when heater is enabled
+  if (loopCnt >= 30) {
+    enableHeater = !enableHeater;
+    sht31.heater(enableHeater);
+    // Serial.print("Heater Enabled State: ");
+    // if (sht31.isHeaterEnabled())
+    //   Serial.println("ENABLED");
+    // else
+    //   Serial.println("DISABLED");
+    loopCnt = 0;
+  }
+  loopCnt++;
 }

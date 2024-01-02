@@ -93,6 +93,13 @@ uint8_t etaSec = 0;
 String etaDS = "HH:MM:SS";
 RTC_DATA_ATTR int bootCount = 0;
 
+int elapseEntry = 0;
+int elapseExit = 0;
+int elapseSec = 0;
+int e_h, e_m, e_s;
+String e_HourStr, e_MinStr, e_SecStr;
+String e_elapse;
+
 /* Comment this out to disable prints and save space */
 #define BLYNK_PRINT Serial
 #define BLYNK_TEMPLATE_ID   "TMPLjsD8y_SC" // template ID for M04 and M05 then subcribing to Plus RM30.90 13Feb2023
@@ -162,7 +169,8 @@ RTC_DATA_ATTR int bootCount = 0;
 // Using port 8883 for MQTTS
 #define AIO_SERVERPORT  8883                  
 #define AIO_USERNAME    "clumzyazid"
-#define AIO_KEY         "aio_VGkW373G4psoR4xzLlG4WvOsmvue"
+// #define AIO_KEY         "aio_VGkW373G4psoR4xzLlG4WvOsmvue" // disabled 15 Nov after GitHub leaked
+#define AIO_KEY         "aio_kDjS914Yqk7rDbXUt5s1f2gWjngx" // new key obtained 16 Nov 2023
 
 String entryStatus = "None";
 
@@ -200,7 +208,7 @@ const char* adafruitio_root_ca = \
       "7h4SeM6Y8l/7MBRpPCz6l8Y=\n"
       "-----END CERTIFICATE-----\n";
 
-Adafruit_MQTT_Subscribe ESP32S2_RGB_SW = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/TOGGLE");
+Adafruit_MQTT_Subscribe ESP32S2_RGB_SW = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/ResetFeed");
 Adafruit_MQTT_Subscribe locationTracker = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/LocationAwareness"); // added 8 Nov 2023 Wednesday
 
 // Setup a feed called 'test' for publishing.
@@ -455,18 +463,18 @@ String ssidstr = "None";
   #define I2C_SCL                 40
 #endif
 
-#define wifiConnRetryAddress    0x0C // 12 & 13 : 2 bytes 
-#define restartCounterAddress   0x0F // 15 & 16 : 2 bytes F 10 11
-#define disconnCounterAddress   0x12 // 18 & 19 bytes
-#define disconnectTS__Address   0x14 // 21 and beyond 
+#define wifiConnRetryAddress    0x0C // DEC 12 & 13 : 2 bytes 
+#define restartCounterAddress   0x0F // DEC 15 & 16 : 2 bytes F 10 11
+#define disconnCounterAddress   0x12 // DEC 18 & 19 bytes
+#define disconnectTS__Address   0x14 // DEC 20 - 34 (HEX 14 - 22) and beyond 
 // ******************************** IFTTT ENTRY STATUS DECLARATION STARTS ********************************
-#define entryStatusAddress      0x20
-#define entryTimestampAddress   0x21
-#define ADS_I2C_ADDRESS         0x48
-
+#define entryStatusAddress      0x23 // HEX 0x23 (DEC 35)
+#define entryTimestampAddress   0x24 // HEX 0x24 - 32 (DEC 36 - 50) ... 24 25 26 27 28 29 2A 2B 2C 2D 2E 2F 30 31 32
+#define elapseAdd               0x33 // HEX 0x33 - 41  (DEC 51 - 65) ... 33 34 35 36 37 38 39 3A 3B 3C 3D 3E 3F 40 41 .. 41 – 33 = E ... 65 – 51 = 14
 uint8_t entryState = 0; // 0 exited || 1 entered || 2 keluar || 3 masuk || 4 unknown
 String ets = "None";
 // ******************************** IFTTT ENTRY STATUS DECLARATION ENDS ********************************
+#define ADS_I2C_ADDRESS         0x48
 
 WiFiUDP             ntpUDP;
 NTPClient           timeClient(ntpUDP);
@@ -500,7 +508,7 @@ bool GROVE_LCD_AVAILABLE = false; // true for debugging purpose 27.02.2023 | cha
 bool INA219_AVAILABLE = false;
 bool ADS1115_AVAILABLE = false;
 
-#define EEPROM_SIZE             48
+#define EEPROM_SIZE             100
 #define FAST_DELAY              1000
 
 int restartCounter;      // value will be loaded from EEPROM
@@ -611,7 +619,6 @@ float humid ;
 String mac_str = "UNKNOWN MAC";
 String esp_model = "UNKNOWN ESP";
 
-
 void setup()
 {
   Serial.begin(115200);
@@ -716,6 +723,7 @@ void setup()
   }
   
   init_eeprom();
+  // clear_eeprom();
   // write16bitIntoEEPROM(wifiConnRetryAddress, 0); // comment this after debugging || the first upload
 
   // restartCounter = EEPROM.read(restartCounterAddress);
@@ -725,6 +733,7 @@ void setup()
   restartCounter = read16bitFromEEPROM(restartCounterAddress);
   disconnection_count = read16bitFromEEPROM(disconnCounterAddress);
   wifiRetryCount = read16bitFromEEPROM(wifiConnRetryAddress);
+  elapseSec = read16bitFromEEPROM(elapseAdd);
   if(wifiRetryCount > 65535) wifiRetryCount = 0;
   check_restart_count();
   lcd.clear();
@@ -737,18 +746,30 @@ void setup()
   ets = readStringFromEEPROM(entryTimestampAddress);
   entryState = EEPROM.read(entryStatusAddress);
 
-  if(entryState == 0)
+  if(entryState == 0){
     entryStatus = "EXITED[M]";
-  else if(entryState == 1)
+    elapseExit = elapseSec;
+    redOn();
+  }
+  else if(entryState == 1){
     entryStatus = "ENTERED[M]";
-  else if(entryState == 2)
+    elapseEntry = elapseSec;
+    blueOn();
+  }
+  else if(entryState == 2){
     entryStatus = "KELUAR[M]";
-  else if(entryState == 3)
+    elapseExit = elapseSec;
+    redOn();
+  }
+  else if(entryState == 3){
     entryStatus = "MASUK[M]";
-  else if(entryState == 4)
-    entryStatus = "UNKNOWN[M]";
+    elapseEntry = elapseSec;
+    greenOn();
+  }
+  else if(entryState == 99)
+    entryStatus = "WEIRD[M]";
   else
-    entryStatus = "FAILED[M]";
+    entryStatus = "ets#:" + String(entryState);
 
   lcd.clear();
   lcd.setCursor(0,0);
@@ -801,7 +822,7 @@ void setup()
     try_wifi_connect(10); // pre-connection using WiFi.begin() with 10 second default timeout
     lcd.clear();
     lcd.setCursor(0,0);
-    lcd.print("Connecting Blynk");
+    lcd.print("Connecting WiFi");
     lcd.setCursor(0,1);
     lcd.write(1); // add arrow before SSID
     lcd.print(ssid);
@@ -847,12 +868,13 @@ void setup()
   _clock.fillDayOfWeek(WED);
   _clock.setTime(); // write time and date to the RTC chip
 
-  Blynk.begin(auth, ssid, pass); // connectWiFi in Blynk is active. meaning connecting twice
+  // disable this for IFTTT code
+  // Blynk.begin(auth, ssid, pass); // connectWiFi in Blynk is active. meaning connecting twice
 
   if(GROVE_LCD_AVAILABLE || I2C_LCD_AVAILABLE){
     lcd.clear();
     lcd.setCursor(0,0);
-    lcd.print("Blynk Connected!");
+    lcd.print("IFTTT Connected!");
     lcd.setCursor(0,1);
     lcd.print("-"+String(BLYNK_DEVICE_NAME)+" INIT-");
   }
@@ -922,7 +944,7 @@ void loop() {
   Adafruit_MQTT_Subscribe *subscription;
   while ((subscription = mqtt.readSubscription(1000))) { // timeout here is also acting like delay interval for the entire code
     if (subscription == &ESP32S2_RGB_SW) {
-      Serial.print(F("Got: "));
+      Serial.print(F("\n[ResetFeed] ESP32S2_RGB_SW Got: "));
       Serial.println((char *)ESP32S2_RGB_SW.lastread);
       if (!strcmp((char*) ESP32S2_RGB_SW.lastread, "1")){
         rgbOff();
@@ -934,6 +956,8 @@ void loop() {
           lcd.print("Request Restart"); // default_hostname
           lcd.setCursor(0, 1); // row 1, column 0
           lcd.print("Bye-bye.......");
+          disconnected_ts = get_timestamp();
+          writeStringToEEPROM(disconnectTS__Address, disconnected_ts);
           delay(1000);
           ESP.restart();
         }
@@ -955,63 +979,53 @@ void loop() {
     // locationTracker added 8 Nov 2023 Wednesday
     // 0 exited || 1 entered || 2 keluar || 3 masuk || 4 unknown
     if(subscription == &locationTracker){
-      Serial.print(F("GPS Tracker Got: "));
-      Serial.println((char *)locationTracker.lastread);     
-      if (!strcmp((char*) locationTracker.lastread, "entered")){
-        entryStatus = "ENTERED";
-        entryState = 1;
-        greenOn();
-        if (! pubTracker.publish("Sent ESP32 received entered (GPS)")) {
-          Serial.println(F("Failed"));
-        } else {
-          Serial.println(F("OK! Sent ESP32 received entered (GPS)"));
-        }
-      } 
-      else if(!strcmp((char*) locationTracker.lastread, "exited")){
-        entryStatus = "EXITED";
-        entryState = 0;
-        rgbOff();
-        if (! pubTracker.publish("Sent ESP32 received exited (GPS)")) {
-          Serial.println(F("Failed"));
-        } else {
-          Serial.println(F("OK! Sent ESP32 received exited (GPS)"));
-        }
-      }
-      else if(!strcmp((char*) locationTracker.lastread, "masuk")){
+      Serial.print(F("\nGPS Tracker Got: "));
+      // Serial.println((char *)locationTracker.lastread);     
+      entryStatus = (char *)locationTracker.lastread; // added 17 Nov 2023 after 99 weirdness in gps detection
+
+      if(!strcmp(entryStatus.c_str(), "masuk")){
         entryStatus = "MASUK";
         entryState = 3;
-        redOn();
-        if (! pubTracker.publish("Sent ESP32 received masuk (switch)")) {
-          Serial.println(F("Failed"));
-        } else {
-          Serial.println(F("OK! Sent ESP32 received masuk (switch)"));
-        }
+        greenOn();
+        // if (! pubTracker.publish("Sent ESP32 received masuk (switch)")) {
+        //   Serial.println(F("Failed"));
+        // } else {
+        //   Serial.println(F("OK! Sent ESP32 received masuk (switch)"));
+        // }
       }
-      else if(!strcmp((char*) locationTracker.lastread, "keluar")){
+      else if(!strcmp(entryStatus.c_str(), "keluar")){
         entryStatus = "KELUAR";
         entryState = 2;
-        rgbOff();
-        if (! pubTracker.publish("Sent ESP32 received keluar (switch)")) {
-          Serial.println(F("Failed"));
-        } else {
-          Serial.println(F("OK! Sent ESP32 received keluar (switch)"));
-        }
+        redOn();
+        // if (! pubTracker.publish("Sent ESP32 received keluar (switch)")) {
+        //   Serial.println(F("Failed"));
+        // } else {
+        //   Serial.println(F("OK! Sent ESP32 received keluar (switch)"));
+        // }
       }
       else{
-        rgbOff();
-        // Serial.print("Feedback from ESP32 is:");
-        // Serial.println((char *)locationTracker.lastread);  
-        if (! pubTracker.publish((char *)locationTracker.lastread)) {
-          Serial.println(F("Failed"));
-        } else {
-          Serial.println(F("OK! Sent ESP32 received failed lastread"));
-      }   
-        entryStatus = (char *)locationTracker.lastread; // added 15 Nov 2023
-        entryState = 4;
-      }
+        // entryStatus = (char *)locationTracker.lastread; // added 19 Nov 2023
+         if(!strcmp(entryStatus.c_str(), "exited")) {
+            entryStatus = "GPSexited";
+            entryState = 0;
+            redOn(); 
+          }
+          if(!strcmp(entryStatus.c_str(), "entered")) {
+            entryStatus = "GPSentered";
+            entryState = 1;
+            blueOn();
+          }
+          // Serial.println(F("[locationTracker] checking completed")); // discovered whitespace 19 Nov
+
+        // if (! pubTracker.publish("####[pubTracker] ESP32 received lastread in ELSE block ####")) {
+        //   Serial.println(F("Failed"));
+        // } else {
+        //   Serial.println(F("####[pubTracker] SUCCESS! ESP32 received lastread in ELSE block ####"));
+        // } // end of else
+      } // end of if..else (biggest block)
+      
       ets = get_timestamp();
-      // #define entryStatusAddress      0x20
-      // #define entryTimestampAddress   0x21
+
       Serial.println("EEPROM write started");
       EEPROM.write(entryStatusAddress, entryState);
       writeStringToEEPROM(entryTimestampAddress, ets);
@@ -1028,36 +1042,69 @@ void loop() {
       Serial.println(cstr);
       */
       
-      String responseStr = "ESP32 ack response | entryState = ";
+      String responseStr = "ESP32 ACK | entryState = ";
       responseStr.concat(String(entryState));
       responseStr.concat(" | ");   
       responseStr.concat(entryStatus);   
       const char* eeprom_ack_str = responseStr.c_str();
 
-      Serial.print("eeprom_ack_str:");
-      Serial.println(eeprom_ack_str);
+      // Serial.print("eeprom_ack_str:");
+      // Serial.println(eeprom_ack_str);
 
       if (! pubTracker.publish(eeprom_ack_str)) {
           Serial.println(F("Failed"));
       } else {
           Serial.println(F(eeprom_ack_str));
       }
+      delay(100);
+
+      responseStr = "Total Elapse for ";
+      if(entryState) // this should be the opposite of current state / to reflect the previous state
+        responseStr.concat("GPS Exited");
+      else
+        responseStr.concat("GPS Entered");
+      responseStr.concat(" | ");   
+      responseStr.concat(e_elapse);   
+      eeprom_ack_str = responseStr.c_str();
+
+      // Serial.print("eeprom_ack_str:");
+      // Serial.println(eeprom_ack_str);
+
+      if (! pubTracker.publish(eeprom_ack_str)) {
+          Serial.println(F("Failed"));
+      } else {
+          Serial.println(F(eeprom_ack_str));
+      }
+      delay(100);
       Serial.println("EEPROM write ended");
+      // read_eeprom();
     } // end of locationTracker
   } //  end of MQTT read subscription blocking loop
 
+  countElapse(); // called to update entry / exit elapse timer
 
   lcd.clear();
-  if(millis() % 2 == 0){
+  if(elapseSec % 2 == 0){
     lcd.setCursor(0, 0); // row 1, column 0
     lcd.print("Last "+ entryStatus); // default_hostname
     lcd.setCursor(0, 1); // row 1, column 0
     lcd.print(ets);
   }
   else{
-    display_uptime_top_row();
+    // display_uptime_top_row();
+    lcd.setCursor(0, 0); // row 1, column 0
+    if(entryState == 1 || entryState == 3)
+      lcd.print("IN for:"+ e_elapse); // in elapse
+    else
+      lcd.print("OUTfor:"+ e_elapse); // out elapse
+
     lcd.setCursor(0, 1); // row 1, column 0
-    lcd.print("Status:"+ entryStatus); // default_hostname
+    // lcd.print("Status:"+ entryStatus); // default_hostname
+    if(entryState == 1 || entryState == 3)
+      lcd.print("SirYazid is here"); 
+    else
+      lcd.print("SirYazid at home"); 
+
   }
 
 } // end of void loop for MQTT
@@ -1071,16 +1118,42 @@ void MQTT_connect() {
 
  Serial.print("Connecting to Adafruit IO");
 
+ /*
+ -1 = Error connecting to server 
+ 1 = Wrong protocol 
+ 2 = ID rejected 
+ 3 = Server unavailable 
+ 4 = Bad username or password 
+ 5 = Not authenticated 
+ 6 = Failed to subscribe 
+ Use connectErrorString() to get a printable string version of the error.
+ 
+ */
+
   uint8_t retries = 5;
   while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
        Serial.println(mqtt.connectErrorString(ret));
-       Serial.println("Retrying Adafruit connection in 5 seconds...");
+       lcd.clear();
+        lcd.setCursor(0, 0); // row 1, column 0
+        lcd.print("AdafruitIO Try "+String(retries)); // default_hostname
+        lcd.setCursor(0, 1); // row 1, column 0
+        // lcd.print("-Not Authorized-");
+        lcd.print(mqtt.connectErrorString(ret));
+
+
+       Serial.println("Retrying Adafruit connection in 1 seconds...");
        mqtt.disconnect();
-       delay(5000);  
+       delay(1000);  
        retries--;
        if (retries == 0) {
         //  while (1);
         Serial.println("Giving up MQTT...restarting now");
+        lcd.clear();
+        lcd.setCursor(0, 0); // row 1, column 0
+        lcd.print("Adafruit IO Conn"); // default_hostname
+        lcd.setCursor(0, 1); // row 1, column 0
+        lcd.print("-Restarting ESP-");
+
         delay(1000);
         ESP.restart();
        }
@@ -1594,6 +1667,44 @@ void sync_rtc_ntp(){
   
 }
 
+void countElapse(){
+  /////////// Entry or Exit Duration Elapse Counter Starts ///////////
+  if(entryState == 1 || entryState == 3){
+    elapseExit = 0; // reset elapseExit upon entry
+    elapseEntry += 1; // increment elapseEntry
+    elapseSec = elapseEntry;
+    e_h = elapseEntry / 3600;
+    e_m = (elapseEntry % 3600) / 60;
+    e_s = elapseEntry % 60;
+  } else{
+    elapseExit += 1; // increment elapseExit
+    elapseEntry = 0; // reset elapseEntry upon exit
+    elapseSec = elapseExit;
+    e_h = elapseExit / 3600;
+    e_m = (elapseExit % 3600) / 60;
+    e_s = elapseExit % 60;
+  }
+
+  if(e_h < 10)  e_HourStr = "0"+String(e_h);
+  else              e_HourStr = String(e_h);
+  if(e_m < 10)   e_MinStr = "0"+String(e_m);
+  else              e_MinStr = String(e_m);
+  if(e_s < 10)   e_SecStr = "0"+String(e_s);
+  else              e_SecStr = String(e_s);
+
+  if(e_s == 0){
+    e_elapse = e_HourStr +":"+ e_MinStr +":"+ e_SecStr;  
+    write16bitIntoEEPROM(elapseAdd, elapseSec);
+    // e_elapse = e_HourStr +":"+ e_MinStr +":"+ e_SecStr;  
+    // writeStringToEEPROM(elapseAdd,e_elapse);
+  }else{
+    e_elapse = e_HourStr +":"+ e_MinStr +":"+ e_SecStr;  
+  }  
+  /////////// Entry or Exit Duration Elapse Counter Ends ///////////
+
+} // end of countElapse for GPSentered and GPSexited
+
+
 String get_timestamp(){
   timeClient.update();
   // https://github.com/taranais/NTPClient.git
@@ -1660,7 +1771,7 @@ String get_timestamp(){
     }
   }
   return dateTime;
-}
+} // end of get_timestamp()
 
 
 void off_onboard_led(){
@@ -1917,18 +2028,43 @@ void check_restart_count(){
   }
 }
 
-void init_eeprom(){
-
-  if (!EEPROM.begin(EEPROM_SIZE))
-  {
-    Serial.println("failed to initialise EEPROM"); delay(1000000);
-  }
-
-  Serial.println(" bytes read from Flash:");
+void clear_eeprom(){
   for (int i = 0; i < EEPROM_SIZE; i++)
   {
-    if(i >= 21){
-      Serial.print("Disconnected Timestamp String Memory "); Serial.print(i);   Serial.print(":");
+    EEPROM.write(i, 255);
+  }
+  Serial.println("[EEPROM REFORMATTED]");
+}
+
+void read_eeprom(){
+
+  Serial.println(" [READ AGAIN] bytes read from Flash:");
+  for (int i = 0; i < EEPROM_SIZE; i++)
+  {
+    if(i >= 20 && i <= 34){
+      Serial.print("[+][IFTTT] Disconnected Timestamp String Memory "); 
+      Serial.print(i); Serial.print(" = ");
+      Serial.print(i,HEX); Serial.print(" ASCII DEC:");
+    }
+
+  // #define entryStatusAddress      0x23 // HEX 0x23 (DEC 35)
+  // #define entryTimestampAddress   0x24 // HEX 0x24 (DEC 36 - 50)
+
+    if(i == 35){
+      Serial.print("[+][IFTTT] entryState code at location "); 
+      Serial.print(i); Serial.print(" = ");
+      Serial.print(i,HEX); Serial.print(" ASCII DEC:");
+    }
+
+    if(i >= 36 && i <= 50){ // 0x31 until 0x3F
+      Serial.print("[+] entryTimestamp at location "); 
+      Serial.print(i); Serial.print(" = ");
+      Serial.print(i,HEX); Serial.print(" ASCII DEC:");
+    }
+    if(i>50){
+      Serial.print("[+][IFTTT] Unallocated location "); 
+      Serial.print(i); Serial.print(" = ");
+      Serial.print(i,HEX); Serial.print(" ASCII DEC:");
     }
     // else if(i== 12 || i==13){
     //     Serial.print("WiFi Retry Count Memory "); Serial.print(i);   Serial.print(":");
@@ -1943,6 +2079,62 @@ void init_eeprom(){
     Serial.print(byte(EEPROM.read(i))); Serial.println();
   }
   Serial.println();
+
+
+}
+
+void init_eeprom(){
+
+  if (!EEPROM.begin(EEPROM_SIZE))
+  {
+    Serial.println("failed to initialise EEPROM"); delay(1000000);
+  }
+
+//   Serial.println("[EEPROM] bytes read from Flash:");
+//   for (int i = 0; i < EEPROM_SIZE; i++)
+//   {
+//     if(i >= 20 && i <= 34){
+//       Serial.print("[IFTTT] Disconn TS str Mem "); 
+//       Serial.print(i); Serial.print(" = ");
+//       Serial.print(i,HEX); Serial.print(" ASCII DEC:");
+//     }
+
+// // #define entryStatusAddress      0x23 // HEX 0x23 (DEC 35)
+// // #define entryTimestampAddress   0x24 // HEX 0x24 (DEC 36 - 50)
+
+//     if(i == 35){
+//       Serial.print("[IFTTT] entryState code at location "); 
+//       Serial.print(i); Serial.print(" = ");
+//       Serial.print(i,HEX); Serial.print(" ASCII DEC:");
+//     }
+
+//     if(i >= 36 && i <= 50){ // 0x31 until 0x3F
+//       Serial.print("[IFTTT] entryTimestamp at location "); 
+//       Serial.print(i); Serial.print(" = ");
+//       Serial.print(i,HEX); Serial.print(" ASCII DEC:");
+//     }
+//     // 15:35:02 11-17 (ascii char) (15 mem blocks including NULL char \0)
+//     // 14(shift out) 49 53 58 51 53 58 48 50 32 49 49 45 49 55
+//     if(i>50){
+//       Serial.print("Unallocated location "); 
+//       Serial.print(i); Serial.print(" = ");
+//       Serial.print(i,HEX); Serial.print(" ASCII DEC:");
+//     }
+    
+//     // else if(i== 12 || i==13){
+//     //     Serial.print("WiFi Retry Count Memory "); Serial.print(i);   Serial.print(":");
+//     // }
+//     // else if(i== 15 || i==16){
+//     //     Serial.print("Restart Count Memory "); Serial.print(i);   Serial.print(":");
+//     // }else if (i== 18 || i==19){
+//     //     Serial.print("Disconnection Count Memory "); Serial.print(i);   Serial.print(":");
+//     // }else{
+//     //     Serial.print("R "); Serial.print(i);   Serial.print(":");
+//     // }
+//     if(byte(EEPROM.read(i))==14) Serial.print("SHIFT OUT:");
+//     Serial.print(byte(EEPROM.read(i))); Serial.println();
+//   }
+//   Serial.println();
 }
 
 void initINA219(){
@@ -1984,14 +2176,14 @@ void i2c_scan() {
     Wire.beginTransmission(address);
     delay(1); // re-enabled 3.03.2023 Friday MKE2 (issue fixed) | kind of fixing the slow scanning issue 03.03.2023
     error = Wire.endTransmission();
-    Serial.printf("Address: 0x%02x \t Error: %d\n", address, error); // added 27.02.2023 at Berlian
+    // Serial.printf("Address: 0x%02x \t Error: %d\n", address, error); // added 27.02.2023 at Berlian
 
     if (error == 0) {
-      Serial.print("------------------------------- I2C device found at address 0x");
-      if (address<16) {
-        Serial.print("0");
-      }
-      Serial.println(address,HEX);
+    //   Serial.print("------------------------------- I2C device found at address 0x");
+    //   if (address<16) {
+    //     Serial.print("0");
+    //   }
+    //   Serial.println(address,HEX);
       if(address == 0x27) I2C_LCD_AVAILABLE = true;
       if(address == 0x3E) GROVE_LCD_AVAILABLE = true;
       if(address == 0x40) INA219_AVAILABLE    = true;
@@ -2326,7 +2518,7 @@ BLYNK_CONNECTED() {
   Blynk.virtualWrite(V5, restartCounter);
   Blynk.virtualWrite(V8, ssid);
   String disconn_ts_str = readStringFromEEPROM(disconnectTS__Address);
-  Serial.print("The disconnection timestamp from EEPROM: ");
+  Serial.print("|||||||||||||||||||||||||||||||||| [IFTTT/Blynk Restart] The disconnection timestamp from EEPROM: ");
   Serial.println(disconn_ts_str);
   if(disconnection_count == 0)
     Blynk.virtualWrite(V15, "Not yet");
